@@ -16,6 +16,7 @@ const SECTION_LABELS: Record<string, string> = {
   payments: 'Payments',
   products: 'Products',
   stock: 'Stock',
+  templates: 'Bot messages',
   bypass: 'Bypass numbers',
   settings: 'Settings',
 };

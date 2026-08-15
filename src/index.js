@@ -17,6 +17,7 @@ const bypassService = require('./services/bypassService');
 const productService = require('./services/productService');
 const { createAdapter } = require('./whatsapp/adapter');
 const { createRouter } = require('./bot/router');
+const templates = require('./bot/templates');
 const { startOutboxWorker } = require('./outbox/worker');
 
 async function preflight() {
@@ -26,6 +27,7 @@ async function preflight() {
 
   await ping();
   await settingsService.ensureDefaults();
+  await templates.ensureTemplates();
   const admins = await settingsService.syncAdminsFromEnv();
 
   const products = await productService.activeProducts();
@@ -89,6 +91,9 @@ async function main() {
   // .env - pick those edits up without a restart.
   const stopSettingsSync = settingsService.startSettingsSync();
 
+  // Message wording is edited in the panel; pick those edits up live.
+  const stopTemplateSync = templates.startTemplateSync();
+
   let shuttingDown = false;
   const shutdown = async (signal) => {
     if (shuttingDown) return;
@@ -96,6 +101,7 @@ async function main() {
     logger.info('process.shutdown', { action: signal });
     stopOutbox();
     stopSettingsSync();
+    stopTemplateSync();
     await bot.stop().catch(() => {});
     process.exit(0);
   };

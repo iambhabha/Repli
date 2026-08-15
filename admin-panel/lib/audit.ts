@@ -21,7 +21,9 @@ export type AuditAction =
   | 'HUMAN_TAKEOVER'
   | 'BOT_RESUMED'
   | 'MESSAGE_SENT'
-  | 'SETTINGS_UPDATED';
+  | 'SETTINGS_UPDATED'
+  | 'TEMPLATE_UPDATED'
+  | 'TEMPLATE_RESET';
 
 interface AuditInput {
   actor: string;

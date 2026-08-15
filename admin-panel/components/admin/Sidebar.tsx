@@ -7,6 +7,7 @@ import {
   ListChecks,
   LogOut,
   MessageCircle,
+  MessageSquareText,
   Package,
   PhoneOff,
   Search,
@@ -145,7 +146,15 @@ export function Sidebar({
     },
     {
       heading: 'Bot',
-      items: [{ id: 'bypass', title: 'Bypass numbers', icon: PhoneOff, href: '/admin/bypass' }],
+      items: [
+        {
+          id: 'templates',
+          title: 'Bot messages',
+          icon: MessageSquareText,
+          href: '/admin/templates',
+        },
+        { id: 'bypass', title: 'Bypass numbers', icon: PhoneOff, href: '/admin/bypass' },
+      ],
     },
   ];
 

@@ -33,6 +33,7 @@ const PAGES: Result[] = [
   { id: 'p-products', kind: 'page', title: 'Products', href: '/admin/products' },
   { id: 'p-stock', kind: 'page', title: 'Stock', href: '/admin/stock' },
   { id: 'p-low', kind: 'page', title: 'Stock — low stock', href: '/admin/stock?level=LOW' },
+  { id: 'p-templates', kind: 'page', title: 'Bot messages — edit what Repli says', href: '/admin/templates' },
   { id: 'p-bypass', kind: 'page', title: 'Bypass numbers', href: '/admin/bypass' },
   { id: 'p-settings', kind: 'page', title: 'Settings', href: '/admin/settings' },
 ];

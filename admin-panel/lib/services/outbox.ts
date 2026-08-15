@@ -2,6 +2,7 @@ import { REPLI_API_KEY, REPLI_API_URL } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { normalisePhone } from '@/lib/utils/format';
 import type { OutboundMessageRow } from '@/types/database';
+import { renderTemplate } from './templates';
 
 export interface SendResult {
   /** true = the bot confirmed delivery, false = queued for the bot to pick up. */
@@ -183,6 +184,65 @@ export const customerMessages = {
           '',
           'Koi dikkat ho toh yahin message karo, hamari team help karegi ❤️',
         ].join('\n');
+  },
+};
+
+/**
+ * The wording the owner edited, falling back to the built-in text.
+ *
+ * The bot seeds `message_templates` on startup; until it has run once the
+ * table is empty, and the panel must still be able to send a confirmation.
+ * So the fallback is not dead code - it is the first-run path.
+ */
+async function fromTemplate(
+  key: string,
+  language: CustomerLanguage,
+  vars: Record<string, string | number>,
+  fallback: string
+): Promise<string> {
+  try {
+    const rendered = await renderTemplate(key, language, vars);
+    return rendered || fallback;
+  } catch (error) {
+    console.error('[outbox] template lookup failed, using the built-in text', error);
+    return fallback;
+  }
+}
+
+/** Optional "Size: M" line - empty for products without sizes. */
+function sizeLine(size: string | null | undefined): string {
+  return size ? `Size: ${size}` : '';
+}
+
+export const customerText = {
+  async orderConfirmed(order: ConfirmedOrder, language: CustomerLanguage): Promise<string> {
+    const item = order.items[0];
+    return fromTemplate(
+      'orderConfirmed',
+      language,
+      {
+        orderId: order.order_id,
+        product: item?.product_name_snapshot || '-',
+        color: item?.color_snapshot || '-',
+        sizeLine: sizeLine(item?.size_snapshot),
+        quantity: item?.quantity ?? 1,
+        total: `₹${Math.round(Number(order.total ?? 0))}`,
+      },
+      customerMessages.orderConfirmed(order, language)
+    );
+  },
+
+  async paymentRejected(language: CustomerLanguage): Promise<string> {
+    return fromTemplate('paymentRejected', language, {}, customerMessages.paymentRejected(language));
+  },
+
+  async orderCancelled(orderCode: string, language: CustomerLanguage): Promise<string> {
+    return fromTemplate(
+      'orderCancelledByAdmin',
+      language,
+      { orderId: orderCode },
+      customerMessages.orderCancelled(orderCode, language)
+    );
   },
 };
 

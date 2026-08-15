@@ -12,7 +12,7 @@ import type {
 } from '@/types/database';
 import type { OrderStatusFilter, OrderWithDetails } from '@/types/order';
 
-import { customerLanguage, customerMessages, sendWhatsAppMessage } from './outbox';
+import { customerLanguage, customerText, sendWhatsAppMessage } from './outbox';
 
 export const ORDER_SELECT = '*, order_items(*), payments(*)';
 
@@ -127,7 +127,7 @@ export async function verifyPayment(
   if (order) {
     const send = await sendWhatsAppMessage({
       phone: order.phone,
-      text: customerMessages.orderConfirmed(
+      text: await customerText.orderConfirmed(
         {
           order_id: order.order_id,
           total: Number(order.total),
@@ -183,7 +183,7 @@ export async function rejectPayment(
   if (result.phone) {
     const send = await sendWhatsAppMessage({
       phone: result.phone,
-      text: customerMessages.paymentRejected(await customerLanguage(result.phone)),
+      text: await customerText.paymentRejected(await customerLanguage(result.phone)),
       actor: admin.email,
     }).catch(() => null);
     queued = send ? !send.delivered : false;
@@ -225,7 +225,7 @@ export async function cancelOrder(
   if (notifyCustomer) {
     const send = await sendWhatsAppMessage({
       phone: order.phone,
-      text: customerMessages.orderCancelled(order.order_id, await customerLanguage(order.phone)),
+      text: await customerText.orderCancelled(order.order_id, await customerLanguage(order.phone)),
       actor: admin.email,
     }).catch(() => null);
     queued = send ? !send.delivered : false;
