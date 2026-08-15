@@ -1,0 +1,309 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* =====================================================================
+   Design tokens (shadcn/ui, Tailwind v4)
+
+   Every colour in the panel comes from here. Components use semantic names
+   — bg-background, text-muted-foreground, border-border — so the whole app
+   restyles from this one block, and a dark theme is a matter of swapping
+   the values below rather than touching a single component.
+
+   The palette is deliberately monochrome: ink on paper, with a black
+   sidebar. Nothing is distinguished by hue, so status has to be carried by
+   weight, fill and label - which is also what makes it readable to someone
+   who cannot tell two hues apart.
+   ===================================================================== */
+:root {
+  --radius: 0.625rem;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+
+  --destructive: oklch(0.32 0 0);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  --success: oklch(0.205 0 0);
+  --warning: oklch(0.556 0 0);
+
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+
+  /* The sidebar is the one large black field: it anchors the page and makes
+     the white workspace read as paper. */
+  --sidebar: oklch(0.145 0 0);
+  --sidebar-foreground: oklch(0.708 0 0);
+  --sidebar-primary: oklch(0.985 0 0);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.556 0 0);
+
+  /* Chat: incoming stays paper-white, outgoing is ink. Direction is carried
+     by weight and side, never by hue. */
+  --chat-bg: oklch(0.968 0 0);
+  --chat-out: oklch(0.205 0 0);
+  --chat-out-foreground: oklch(0.985 0 0);
+  --chat-in: oklch(1 0 0);
+
+  /* The single exception to the monochrome rule: the REPLI wordmark. One
+     accent in an otherwise greyscale product reads as identity, not as
+     status - which is why nothing else is allowed to use it. */
+  --brand-mark: oklch(0.577 0.245 27.325);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+
+  --destructive: oklch(0.75 0 0);
+  --destructive-foreground: oklch(0.145 0 0);
+
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.556 0 0);
+
+  --sidebar: oklch(0.115 0 0);
+  --sidebar-foreground: oklch(0.708 0 0);
+  --sidebar-primary: oklch(0.985 0 0);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 12%);
+
+  --chat-bg: oklch(0.205 0 0);
+  --chat-out: oklch(0.985 0 0);
+  --chat-out-foreground: oklch(0.145 0 0);
+  --chat-in: oklch(0.269 0 0);
+
+  --brand-mark: oklch(0.704 0.191 22.216);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chat-bg: var(--chat-bg);
+  --color-chat-out: var(--chat-out);
+  --color-chat-out-foreground: var(--chat-out-foreground);
+  --color-chat-in: var(--chat-in);
+  --color-brand-mark: var(--brand-mark);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+
+  /* Visible focus everywhere — the panel gets used one-handed on a phone. */
+  :focus-visible {
+    @apply outline-ring outline-2 outline-offset-2;
+  }
+
+  /* Same for the browser's own text selection and search-field affordances. */
+  ::selection {
+    background-color: var(--foreground);
+    color: var(--background);
+  }
+
+  input[type='search']::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
+/* =====================================================================
+   Shorthand classes used across the app.
+
+   They are thin aliases over the tokens above, not a second design system:
+   changing a token changes these too. `@utility` (not `@layer components`)
+   because Tailwind v4 only lets you @apply utilities.
+   ===================================================================== */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium
+    whitespace-nowrap transition-all outline-none select-none
+    disabled:pointer-events-none disabled:opacity-50
+    focus-visible:ring-[3px] focus-visible:ring-ring/40
+    [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0;
+  height: --spacing(9);
+  padding-inline: --spacing(4);
+}
+
+@utility btn-primary {
+  @apply btn bg-primary text-primary-foreground shadow-xs hover:bg-primary/90;
+}
+
+@utility btn-secondary {
+  @apply btn border border-input bg-background text-foreground shadow-xs
+    hover:bg-accent hover:text-accent-foreground;
+}
+
+/* Without red to lean on, a destructive button earns its weight from an
+   outline that inverts on hover — it looks like a switch being thrown. */
+@utility btn-danger {
+  @apply btn border border-foreground bg-background font-semibold text-foreground shadow-xs
+    hover:bg-foreground hover:text-background focus-visible:ring-foreground/30;
+}
+
+@utility btn-ghost {
+  @apply btn text-muted-foreground hover:bg-accent hover:text-accent-foreground;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-border bg-card text-card-foreground shadow-sm;
+  }
+
+  .input {
+    @apply flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1
+      text-sm shadow-xs transition-[color,box-shadow] outline-none
+      placeholder:text-muted-foreground
+      focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .label {
+    @apply mb-2 block text-sm leading-none font-medium select-none;
+  }
+
+  .badge {
+    @apply inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-md border
+      border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap
+      [&>svg]:size-3 [&>svg]:pointer-events-none;
+  }
+
+  .table-wrap {
+    @apply overflow-x-auto;
+  }
+
+  .th {
+    @apply h-10 px-4 text-left align-middle text-xs font-medium tracking-wide
+      text-muted-foreground uppercase;
+  }
+
+  .td {
+    @apply px-4 py-3 align-middle text-sm;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-md bg-muted;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+/* =====================================================================
+   Deliberately OUTSIDE every @layer.
+
+   Unlayered author styles beat layered ones, and this rule has to beat
+   Tailwind's `shadow-xs` utility on the input - the whole trick is a
+   box-shadow, so a utility that also sets box-shadow would silently undo it.
+   That is exactly what happened the first time: Chrome kept painting its pale
+   blue over the only monochrome screen in the product.
+   ===================================================================== */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--foreground) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--background) inset !important;
+  box-shadow: 0 0 0 1000px var(--background) inset !important;
+  caret-color: var(--foreground);
+  border-color: var(--input) !important;
+  /* Chrome re-applies its own background on focus after any transition ends;
+     a transition that never ends means it never gets the chance. */
+  transition: background-color 9999s ease-in-out 0s !important;
+}

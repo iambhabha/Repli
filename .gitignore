@@ -1,0 +1,19 @@
+# secrets - NEVER commit
+.env
+
+# dependencies
+node_modules/
+
+# runtime data (never commit customer data or payment screenshots)
+data/proofs/
+logs/
+
+# whatsapp session
+.wa-session/
+*.data.json
+session/
+
+# misc
+npm-debug.log*
+.DS_Store
+*.tmp

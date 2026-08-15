@@ -1,0 +1,23 @@
+{
+  "name": "repli",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Repli - rule based WhatsApp sales & order automation bot (no AI, no n8n)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "mock": "node src/index.js --driver=mock",
+    "migrate": "node scripts/migrate.js",
+    "test": "node tests/flow.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@open-wa/wa-automate": "^4.76.0",
+    "@supabase/supabase-js": "^2.112.3",
+    "pg": "^8.23.0",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.7"
+  }
+}
