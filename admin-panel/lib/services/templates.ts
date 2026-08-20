@@ -1,4 +1,5 @@
 import { logAdminAction } from '@/lib/audit';
+import { invalidateTemplates } from '@/lib/cache';
 import type { AdminSession } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { BadRequest } from '@/lib/utils/http';
@@ -173,6 +174,9 @@ export async function updateTemplate(
     details: { label: data.label, length: text.length },
   });
 
+  // Only this language: the bot caches hi and en separately.
+  await invalidateTemplates(language);
+
   return data;
 }
 
@@ -208,6 +212,8 @@ export async function resetTemplate(
     entityType: 'template',
     entityId: `${key}:${language}`,
   });
+
+  await invalidateTemplates(language);
 
   return data;
 }

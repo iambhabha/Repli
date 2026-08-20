@@ -136,6 +136,15 @@ module.exports = function wwebjsDriver() {
       type: message.type || (isMedia ? 'media' : 'chat'),
       mimetype: mimetype || null,
       timestamp: message.timestamp || null,
+      /**
+       * The name the sender set on their own WhatsApp profile.
+       *
+       * Worth having because the bot can then confirm a name instead of
+       * asking for one - it is the difference between "Aapka naam?" and
+       * "Rahul hi likh du na?". `notifyName` rides along with the message,
+       * so this costs nothing; the Contact lookup is only a fallback.
+       */
+      pushName: String(message._data?.notifyName || '').trim(),
     };
 
     // Status updates and group media are thrown away by the router anyway -
@@ -182,21 +191,49 @@ module.exports = function wwebjsDriver() {
         qrMaxRetries: 0,
       });
 
-      client.on('qr', (qr) => {
-        console.log('\n📱 QR code - WhatsApp > Linked devices > Link a device se scan karo:\n');
+      // WhatsApp only accepts a pairing-code request once the login screen is
+      // up, and 'qr' is the event that tells us it is. Ask once: asking again
+      // on every refresh would invalidate the code the owner is still typing.
+      let pairingAsked = false;
+
+      client.on('qr', async (qr) => {
+        if (config.WA_PAIRING_NUMBER && !pairingAsked) {
+          pairingAsked = true;
+          try {
+            const code = await client.requestPairingCode(config.WA_PAIRING_NUMBER);
+            const pretty = String(code).replace(/(.{4})(?=.)/g, '$1-');
+            console.log(
+              `\n🔑 Pairing code: ${pretty}\n` +
+                `   On WhatsApp (+${config.WA_PAIRING_NUMBER}): Linked devices >\n` +
+                '   Link a device > "Link with phone number instead" > enter this code.\n' +
+                '   (Valid for about 3 minutes. Restart the bot for a new one.)\n'
+            );
+            logger.info('whatsapp.pairing_code', { phone: config.WA_PAIRING_NUMBER });
+            // Fall through: the QR is printed too, so whoever is watching can
+            // use whichever is easier. Both link the same account.
+          } catch (err) {
+            pairingAsked = false;
+            logger.warn('whatsapp.pairing_failed', { error: String(err && err.message) });
+            console.warn(
+              `\n⚠️  Could not get a pairing code (${err && err.message}) - use the QR below.\n`
+            );
+          }
+        }
+
+        console.log('\n📱 QR code - WhatsApp > Linked devices > Link a device:\n');
         qrcode.generate(qr, { small: true });
-        console.log('\n(QR har 20 second me refresh hota hai - naya wala scan karna.)\n');
+        console.log('\n(Refreshes every ~20 seconds - always scan the newest one.)\n');
       });
 
       client.on('authenticated', () => {
         logger.info('whatsapp.authenticated', {});
-        console.log('🔐 Scan ho gaya, session ban raha hai…');
+        console.log('🔐 Scanned. Saving the session…');
       });
 
       client.on('auth_failure', (message) => {
         connected = false;
         logger.error('whatsapp.auth_failed', { error: String(message) });
-        console.error(`\n❌ Login fail: ${message}\n   .wa-session/ delete karke dobara try karo.\n`);
+        console.error(`\n❌ Login failed: ${message}\n   Delete .wa-session/ and try again.\n`);
       });
 
       client.on('ready', () => {
@@ -243,10 +280,80 @@ module.exports = function wwebjsDriver() {
       return client.sendMessage(await resolveChatId(phone), media, { caption: caption || '' });
     },
 
+    /**
+     * Blue ticks.
+     *
+     * Chat.sendSeen() is `client.sendSeen(this.id)` with a chat lookup in
+     * front of it, and that lookup is the part that fails on a @lid chat.
+     * Calling the client method directly removes one way to fail.
+     *
+     * The remaining one cannot be removed here: the injected sendSeen does
+     * its own getChat and answers false when it finds nothing. That used to
+     * be swallowed, which is how read receipts could be broken for weeks
+     * without anybody knowing. It is logged now.
+     */
     async markAsRead(messageId, phone) {
       if (!client) return;
-      const chat = await client.getChatById(await resolveChatId(phone)).catch(() => null);
-      if (chat) await chat.sendSeen().catch(() => {});
+      const chatId = await resolveChatId(phone);
+      const seen = await client.sendSeen(chatId).catch((err) => {
+        logger.warn('read.failed', { phone, action: chatId, error: err.message });
+        return false;
+      });
+      if (!seen) logger.warn('read.no_chat', { phone, action: chatId });
+    },
+
+    /**
+     * Show or clear "typing…".
+     *
+     * Chat.sendStateTyping() and Chat.clearState() are both in
+     * whatsapp-web.js 1.34.7 - checked, not assumed. Same shape as
+     * markAsRead above: resolve the chat, call the method, swallow anything
+     * that goes wrong. A presence update is a courtesy and must never be the
+     * reason a reply does not go out.
+     */
+    async setTyping(phone, on) {
+      if (!client || !client.pupPage) return;
+
+      const chatId = await resolveChatId(phone);
+
+      /**
+       * Sent straight through the injected bridge, with no chat lookup.
+       *
+       * This used to go through Chat.sendStateTyping(), which meant fetching
+       * a Chat first - and on a real phone that step is exactly what broke.
+       * WhatsApp addresses this shop's customers by LID now, and every
+       * single turn logged:
+       *
+       *   typing.no_chat  66451885056088@lid  error="r"
+       *
+       * getChatById() cannot resolve a @lid chat in whatsapp-web.js 1.34.7,
+       * so the code returned before it ever asked for a presence. Typing
+       * never appeared on anybody's phone, and the diagnostics added earlier
+       * are the only reason that was findable at all.
+       *
+       * The Chat object was never needed. Chat.sendStateTyping() is one line
+       * - `WWebJS.sendChatstate('typing', this.id)` - and clearState() the
+       * same with 'stop'. sendChatstate builds a WID and calls the chat
+       * state bridge; it reads no collection and needs no chat to exist,
+       * which is why it works for @lid and @c.us alike. So the lookup that
+       * added nothing but a way to fail is gone.
+       *
+       * Failures are still logged and never thrown: a presence update is a
+       * courtesy, and a reply must go out either way.
+       */
+      try {
+        await client.pupPage.evaluate(
+          (id, composing) => window.WWebJS.sendChatstate(composing ? 'typing' : 'stop', id),
+          chatId,
+          Boolean(on)
+        );
+      } catch (err) {
+        logger.warn('typing.presence_failed', {
+          phone,
+          action: `${on ? 'on' : 'off'} ${chatId}`,
+          error: err.message,
+        });
+      }
     },
   };
 };

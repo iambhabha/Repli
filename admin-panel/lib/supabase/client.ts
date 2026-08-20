@@ -2,7 +2,7 @@
 
 import { createBrowserClient } from '@supabase/ssr';
 
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/env';
+import { requireSupabaseConfig } from '@/lib/env';
 
 /** One year, matching Supabase's own long-lived refresh token window. */
 const REMEMBER_ME_MAX_AGE = 60 * 60 * 24 * 365;
@@ -19,7 +19,9 @@ const REMEMBER_ME_MAX_AGE = 60 * 60 * 24 * 365;
 export function createClient(options: { rememberMe?: boolean } = {}) {
   const { rememberMe } = options;
 
-  return createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  const { url, anonKey } = requireSupabaseConfig();
+
+  return createBrowserClient(url, anonKey, {
     cookieOptions:
       rememberMe === undefined
         ? undefined

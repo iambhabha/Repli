@@ -12,6 +12,7 @@ const { supabase, unwrap } = require('../db/supabase');
 const config = require('../config');
 const logger = require('../logger');
 const customerService = require('./customerService');
+const conversationService = require('./conversationService');
 const productService = require('./productService');
 
 const STATUS = {
@@ -52,6 +53,17 @@ async function create(phone, draft) {
   const shipping = Math.max(0, Math.floor(config.SHIPPING_CHARGE));
   const total = subtotal + shipping;
 
+  /**
+   * What the customer actually pays now.
+   *
+   * A booking reserves the size; the rest is due when the piece is made. The
+   * split is stored per order rather than read from the product later,
+   * because the product's booking amount can change and an order must keep
+   * the terms the customer was quoted.
+   */
+  const bookingAmount = Math.min(total, Math.max(0, Number(product.booking_amount) || 0) * quantity);
+  const remainingAmount = bookingAmount > 0 ? total - bookingAmount : 0;
+
   const customer = await customerService.saveDetails(key, draft);
   const orderId = await nextOrderId();
 
@@ -71,6 +83,10 @@ async function create(phone, draft) {
         subtotal,
         shipping,
         total,
+        booking_amount: bookingAmount,
+        remaining_amount: remainingAmount,
+        payment_mode: bookingAmount > 0 ? 'BOOKING' : 'FULL',
+        brand: product.brand || null,
       })
       .select('*')
       .single(),
@@ -95,7 +111,10 @@ async function create(phone, draft) {
   unwrap(
     await supabase.from('payments').insert({
       order_id: order.id,
-      amount: total,
+      // What is actually being collected now. Recording the full price here
+      // made the panel's "today's revenue" count money the shop never took -
+      // ₹2,499 for every ₹500 booking.
+      amount: bookingAmount > 0 ? bookingAmount : total,
       status: 'PENDING',
     }),
     'payments.create'
@@ -186,7 +205,16 @@ async function confirmPayment(orderId, adminPhone) {
   );
 
   if (result && result.ok) {
-    productService.invalidate(); // stock moved
+    // Awaited, not fired and forgotten: the shared cache still holds the old
+    // count, and the very next message must not be answered from it.
+    await productService.invalidate(); // stock moved
+    /**
+     * confirm_order_payment() flips the conversation to HUMAN inside the
+     * transaction, straight in Postgres - so the cached copy this process
+     * holds is now wrong, and it would keep answering a customer a person
+     * has just taken over. Drop it.
+     */
+    conversationService.forget(result.phone);
     logger.info('order.confirmed', {
       orderId: result.order_id,
       phone: result.phone,
@@ -206,6 +234,8 @@ async function rejectPayment(orderId, adminPhone) {
     'orders.rejectPayment'
   );
   if (result && result.ok) {
+    // Same reason as confirmPayment: the RPC changed the conversation row.
+    conversationService.forget(result.phone);
     logger.info('order.rejected', { orderId: result.order_id, phone: result.phone });
   }
   return result;

@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-import { SUPABASE_URL, supabaseSecretKey } from '@/lib/env';
+import { requireSupabaseConfig, supabaseSecretKey } from '@/lib/env';
 
 /**
  * Service-role client. Bypasses RLS, so it is the ONLY way the panel can read
@@ -18,7 +18,7 @@ export function supabaseAdmin(): SupabaseClient {
     throw new Error('supabaseAdmin() was called in the browser. This is a server-only module.');
   }
   if (!cached) {
-    cached = createClient(SUPABASE_URL, supabaseSecretKey(), {
+    cached = createClient(requireSupabaseConfig().url, supabaseSecretKey(), {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { 'x-repli-client': 'admin-panel' } },
     });
@@ -34,7 +34,7 @@ export function supabaseRealtime(): SupabaseClient {
   if (typeof window !== 'undefined') {
     throw new Error('supabaseRealtime() was called in the browser. This is a server-only module.');
   }
-  return createClient(SUPABASE_URL, supabaseSecretKey(), {
+  return createClient(requireSupabaseConfig().url, supabaseSecretKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
     realtime: { params: { eventsPerSecond: 5 } },
   });

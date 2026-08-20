@@ -1,5 +1,7 @@
 import { AdminShell } from '@/components/admin/AdminShell';
+import { NotConfigured } from '@/components/admin/NotConfigured';
 import { requireAdmin } from '@/lib/auth/guard';
+import { missingEnvVars } from '@/lib/env';
 import { countUnreadTotal } from '@/lib/services/messages';
 import { getSettings } from '@/lib/services/settings';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -16,6 +18,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 export const dynamic = 'force-dynamic';
 
 export default async function ProtectedAdminLayout({ children }: { children: React.ReactNode }) {
+  const missing = missingEnvVars();
+  if (missing.length) return <NotConfigured missing={missing} />;
+
   const session = await requireAdmin();
   const db = supabaseAdmin();
 

@@ -60,4 +60,15 @@ export const api = {
   put: <T>(path: string, json?: unknown) => request<T>(path, { method: 'PUT', json }),
   patch: <T>(path: string, json?: unknown) => request<T>(path, { method: 'PATCH', json }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+
+  /**
+   * A file, not JSON. The content-type header is deliberately NOT set: the
+   * browser has to add its own multipart boundary, and setting it by hand is
+   * the classic way to make the server unable to parse the body.
+   */
+  upload: <T>(path: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return request<T>(path, { method: 'POST', body: form });
+  },
 };

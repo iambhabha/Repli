@@ -76,7 +76,7 @@ module.exports = function mockDriver() {
 
         if (input.startsWith('/as ')) {
           sender = config.normalisePhone(input.slice(4)) || sender;
-          console.log(`→ ab aap ${sender} ke roop me likh rahe ho`);
+          console.log(`→ now writing as ${sender}`);
           rl.setPrompt(`${sender} > `);
           return prompt();
         }
@@ -131,6 +131,19 @@ module.exports = function mockDriver() {
 
     async sendMessage(phone, text) {
       console.log(`\n📤 REPLI → ${phone}\n${text}\n`);
+    },
+
+    /**
+     * The simulator has no presence to send, but it records the calls so a
+     * test can assert the lifecycle, and prints them so `npm run mock`
+     * shows the same rhythm a customer would see.
+     */
+    typingLog: [],
+    async setTyping(phone, on) {
+      this.typingLog.push({ phone, on, at: Date.now() });
+      if (process.env.MOCK_QUIET !== 'true') {
+        console.log(on ? `   … ${phone} sees "typing"` : `   · ${phone} typing stopped`);
+      }
     },
 
     async sendMedia(phone, filePath, caption) {

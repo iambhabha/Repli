@@ -1,4 +1,5 @@
 import { logAdminAction } from '@/lib/audit';
+import { invalidateProduct, invalidateStock } from '@/lib/cache';
 import type { AdminSession } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { BadRequest } from '@/lib/utils/http';
@@ -48,11 +49,39 @@ export async function getProduct(id: string): Promise<ProductWithVariants | null
 export interface ProductInput {
   code?: string;
   name?: string;
+  /** The name the customer chooses by ("Spider-Man"), if different. */
+  design?: string | null;
   description?: string | null;
   emoji?: string | null;
   price?: number;
+  /** Paid now to reserve a size. 0 means the full price is due up front. */
+  bookingAmount?: number;
+  brand?: string;
+  category?: string;
+  /** Made to order: no stock is held, every size is subject to confirmation. */
+  madeToOrder?: boolean;
+  codAvailable?: boolean;
+  codCharge?: number;
+  /**
+   * Extra spellings customers use. The bot matches on these, so this is how
+   * a new product becomes understandable without a deploy.
+   */
+  keywords?: string[];
   active?: boolean;
   sortOrder?: number;
+}
+
+/** "spidey, red wali" or ["spidey","red wali"] -> a clean array. */
+function toKeywords(value: ProductInput['keywords'] | string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  const list = Array.isArray(value) ? value : String(value).split(',');
+  return [...new Set(list.map((word) => word.trim().toLowerCase()).filter(Boolean))];
+}
+
+function money(value: unknown, label: string): number {
+  const amount = Number(value ?? 0);
+  if (!Number.isFinite(amount) || amount < 0) throw new BadRequest(`${label} must be zero or more.`);
+  return amount;
 }
 
 export async function createProduct(
@@ -67,14 +96,29 @@ export async function createProduct(
   if (!name) throw new BadRequest('Product name is required.');
   if (!Number.isFinite(price) || price < 0) throw new BadRequest('Price must be zero or more.');
 
+  const bookingAmount = money(input.bookingAmount, 'Booking amount');
+  // A booking is a deposit, not a surcharge: more than the price would mean
+  // the customer pays extra to reserve something and then pays again.
+  if (bookingAmount > price) {
+    throw new BadRequest('Booking amount cannot be more than the price.');
+  }
+
   const { data, error } = await supabaseAdmin()
     .from('products')
     .insert({
       code,
       name,
+      design: input.design?.trim() || name,
       description: input.description?.trim() || null,
       emoji: input.emoji?.trim() || null,
       price,
+      booking_amount: bookingAmount,
+      brand: input.brand?.trim() || 'AESTHURA',
+      category: input.category?.trim() || 'tshirt',
+      made_to_order: input.madeToOrder ?? false,
+      cod_available: input.codAvailable ?? false,
+      cod_charge: money(input.codCharge, 'COD charge'),
+      keywords: toKeywords(input.keywords) ?? [],
       active: input.active ?? true,
       sort_order: input.sortOrder ?? 0,
     })
@@ -93,6 +137,9 @@ export async function createProduct(
     entityId: data.id,
     details: { code, name, price },
   });
+
+  // The bot caches the product list; tell it the copy it holds is stale.
+  await invalidateProduct();
 
   return data;
 }
@@ -121,10 +168,34 @@ export async function updateProduct(
     if (!Number.isFinite(price) || price < 0) throw new BadRequest('Price must be zero or more.');
     patch.price = price;
   }
+  if (input.design !== undefined) patch.design = input.design?.trim() || null;
+  if (input.brand !== undefined) patch.brand = input.brand.trim();
+  if (input.category !== undefined) patch.category = input.category.trim();
+  if (input.madeToOrder !== undefined) patch.made_to_order = input.madeToOrder;
+  if (input.codAvailable !== undefined) patch.cod_available = input.codAvailable;
+  if (input.codCharge !== undefined) patch.cod_charge = money(input.codCharge, 'COD charge');
+  if (input.keywords !== undefined) patch.keywords = toKeywords(input.keywords);
+  if (input.bookingAmount !== undefined) {
+    patch.booking_amount = money(input.bookingAmount, 'Booking amount');
+  }
   if (input.active !== undefined) patch.active = input.active;
   if (input.sortOrder !== undefined) patch.sort_order = input.sortOrder;
 
   if (!Object.keys(patch).length) throw new BadRequest('Nothing to update.');
+
+  // Checked against whichever of the two is being changed, so lowering a
+  // price cannot quietly leave a booking amount above it.
+  if (patch.booking_amount !== undefined || patch.price !== undefined) {
+    const { data: current } = await supabaseAdmin()
+      .from('products')
+      .select('price,booking_amount')
+      .eq('id', id)
+      .maybeSingle<{ price: number; booking_amount: number }>();
+
+    const price = patch.price ?? Number(current?.price ?? 0);
+    const booking = patch.booking_amount ?? Number(current?.booking_amount ?? 0);
+    if (booking > price) throw new BadRequest('Booking amount cannot be more than the price.');
+  }
 
   const { data, error } = await supabaseAdmin()
     .from('products')
@@ -145,6 +216,8 @@ export async function updateProduct(
     entityId: id,
     details: patch,
   });
+
+  await invalidateProduct();
 
   return data;
 }
@@ -193,6 +266,9 @@ export async function createVariant(
     details: { productId: input.productId, color: data.color, size: data.size, stock },
   });
 
+  // A new variant is stock, not catalogue: only this product's stock key.
+  await invalidateStock(data.product_id);
+
   return data;
 }
 
@@ -232,6 +308,8 @@ export async function updateVariant(
     details: patch,
   });
 
+  await invalidateStock(data.product_id);
+
   return data;
 }
 
@@ -240,10 +318,14 @@ export async function updateVariant(
  * old order must keep pointing at the thing that was actually sold.
  */
 export async function deactivateVariant(id: string, admin: AdminSession): Promise<void> {
-  const { error } = await supabaseAdmin()
+  // Returns the row so the bot's stock key, which is keyed by product rather
+  // than by variant, can be named.
+  const { data, error } = await supabaseAdmin()
     .from('product_variants')
     .update({ active: false })
-    .eq('id', id);
+    .eq('id', id)
+    .select('product_id')
+    .maybeSingle<{ product_id: string }>();
 
   if (error) throw new Error(`products.deactivateVariant: ${error.message}`);
 
@@ -254,6 +336,8 @@ export async function deactivateVariant(id: string, admin: AdminSession): Promis
     entityId: id,
     details: { softDelete: true },
   });
+
+  if (data?.product_id) await invalidateStock(data.product_id);
 }
 
 function toProductWithVariants(row: ProductQueryRow): ProductWithVariants {

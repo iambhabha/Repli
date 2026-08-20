@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { ProductTable } from '@/components/admin/ProductTable';
 import { FilterTabs, SearchInput } from '@/components/ui/Filters';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { listCategories } from '@/lib/services/categories';
 import { listProducts, type ProductFilters } from '@/lib/services/products';
 import { getLowStockThreshold } from '@/lib/services/settings';
 import { first } from '@/lib/utils/pagination';
@@ -21,9 +22,10 @@ export default async function ProductsPage({
   const search = first(params.q) ?? '';
   const status = (first(params.status) as ProductFilters['status']) ?? 'ALL';
 
-  const [products, threshold] = await Promise.all([
+  const [products, threshold, categories] = await Promise.all([
     listProducts({ search, status }),
     getLowStockThreshold(),
+    listCategories(),
   ]);
 
   return (
@@ -48,7 +50,7 @@ export default async function ProductsPage({
         />
       </div>
 
-      <ProductTable products={products} threshold={threshold} />
+      <ProductTable products={products} threshold={threshold} categories={categories} />
     </div>
   );
 }

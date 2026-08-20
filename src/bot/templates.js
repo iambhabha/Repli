@@ -14,10 +14,22 @@
  */
 
 const { supabase } = require('../db/supabase');
+const cache = require('../db/cache');
+const config = require('../config');
 const logger = require('../logger');
 
 const LANGUAGES = ['hi', 'en'];
-const TTL_MS = 15000;
+
+/**
+ * One number for both the cache entry and the background re-read.
+ *
+ * They have to move together. The sync timer calls refresh(force) which
+ * DELETES the cache entry before reloading, so a fifteen-second timer made a
+ * five-minute cache entry meaningless - four re-reads a minute regardless.
+ * Now that the panel invalidates a template the moment it is edited, the
+ * timer is only the safety net for a message that never arrived.
+ */
+const TTL_MS = config.TEMPLATE_TTL_MS;
 
 /**
  * key, what it is for, which {{placeholders}} it may use, and the default
@@ -31,22 +43,54 @@ const CATALOGUE = [
     label: 'Welcome / menu',
     description: 'First reply when Repli cannot tell which product they mean.',
     placeholders: ['products'],
-    hi: `Hey bhai 👋
-Welcome!
-
-Kya chahiye?
-
-{{products}}
-
-Bas option ya product ka naam bhej do.`,
-    en: `Hey 👋
-Welcome!
-
-What are you looking for?
+    // No price here, deliberately. The sales memory is explicit: show the
+    // options first, let them choose, and let price come up only when they
+    // ask or once design and size are settled.
+    hi: `Sure! 😊 Abhi ye available hai:
 
 {{products}}
 
-Just send the number or the product name.`,
+Kaunsa chahiye?`,
+    en: `Sure! 😊 We currently have:
+
+{{products}}
+
+Which one would you like?`,
+  },
+  {
+    key: 'greeting',
+    category: 'greeting',
+    label: 'Greeting (first message)',
+    description: 'Sent before the options. Just a hello - no products, no prices.',
+    placeholders: ['brands'],
+    hi: `Hey 👋 {{brands}} me aapka swagat hai!`,
+    en: `Hey 👋 Welcome to {{brands}}!`,
+  },
+  {
+    key: 'chooseCategory',
+    category: 'greeting',
+    label: 'What are you looking for?',
+    description: 'Second message: the categories that currently have stock.',
+    placeholders: ['categories'],
+    hi: `Aapko kya chahiye?
+
+{{categories}}`,
+    en: `What are you looking for?
+
+{{categories}}`,
+  },
+  {
+    key: 'categoryNotUnderstood',
+    category: 'greeting',
+    label: 'Category not understood',
+    description: 'They replied, but it matched no category.',
+    placeholders: ['categories'],
+    hi: `Samajh nahi aaya bhai 😅 In me se koi ek bhej do:
+
+{{categories}}`,
+    en: `Sorry, I didn't catch that 😅 Pick one of these:
+
+{{categories}}`,
   },
   {
     key: 'productNotUnderstood',
@@ -103,7 +147,7 @@ Which colour would you like?
     label: 'Ask for size',
     description: 'Colour picked, now the size.',
     placeholders: ['sizes'],
-    hi: `Size bata do bhai:
+    hi: `Kaunsa size chahiye bhai?
 
 {{sizes}}`,
     en: `Which size?
@@ -120,7 +164,7 @@ Which colour would you like?
 
 {{item}} available hai.
 
-Size bata do:
+Kaunsa size chahiye?
 {{sizes}}`,
     en: `Perfect {{emoji}}🔥
 
@@ -149,19 +193,17 @@ Available sizes:
     category: 'product',
     label: 'In stock, ask quantity',
     description: 'Everything picked and in stock.',
-    placeholders: ['item', 'price'],
-    hi: `Haan bhai ✅
-{{item}} available hai.
+    placeholders: ['item', 'price', 'booking', 'remaining'],
+    hi: `{{item}} — done ✅
 
-Price: {{price}}
+{{price}} total
+{{booking}} abhi, size reserve karne ke liye
+{{remaining}} baad me, jab piece ready ho jaye`,
+    en: `{{item}} — done ✅
 
-Kitni quantity chahiye?`,
-    en: `Yes ✅
-{{item}} is available.
-
-Price: {{price}}
-
-How many would you like?`,
+{{price}} total
+{{booking}} now, to reserve your size
+{{remaining}} once the piece is ready`,
   },
   {
     key: 'outOfStock',
@@ -326,6 +368,38 @@ Should I ship to this address?
 
 YES - same address
 NO - I'll send new details`,
+  },
+  {
+    key: 'askDetailsKnownName',
+    category: 'details',
+    label: 'Ask details (name already known)',
+    description: 'WhatsApp gave us the name, so only the address is asked for.',
+    placeholders: ['name'],
+    hi: `Order {{name}} ke naam se bana dunga 👍
+
+Delivery ke liye ye bhej do:
+
+Full Address:
+City:
+State:
+PIN Code:`,
+    en: `I'll put the order under {{name}} 👍
+
+Send these for delivery:
+
+Full Address:
+City:
+State:
+PIN Code:`,
+  },
+  {
+    key: 'confirmName',
+    category: 'details',
+    label: 'Confirm the WhatsApp name',
+    description: 'WhatsApp already gives us their profile name - confirm it instead of asking.',
+    placeholders: ['name'],
+    hi: `{{name}} — yahi naam likh du order pe?`,
+    en: `{{name}} — should I put that on the order?`,
   },
   {
     key: 'askName',
@@ -543,50 +617,50 @@ Send "start" to place one.`,
     category: 'payment',
     label: 'Payment link',
     description: 'Sent the moment an order is created.',
-    placeholders: ['orderId', 'total', 'link'],
-    hi: `Order #{{orderId}} ready hai bhai ❤️
+    /**
+     * `payTo` is empty whenever the scanner is going out with this message,
+     * which is almost always. A QR and a typed UPI id in the same breath is
+     * two payment destinations for one payment - and when they disagree, as
+     * this shop's did, the customer has to guess. The picture wins because
+     * it is what people actually scan; the text is what is left when there
+     * is no picture to send.
+     */
+    placeholders: ['orderId', 'total', 'booking', 'remaining', 'payTo'],
+    hi: `Booking #{{orderId}} 🙌
 
-Total Amount: {{total}}
+Abhi dena hai: {{booking}}
+Baaki {{remaining}} tab, jab piece ready ho jaye.
 
-Payment yahan karo:
+{{payTo}}
 
-{{link}}
+Payment ke baad screenshot yahin bhej dena — verify karke booking confirm kar dunga.`,
+    en: `Booking #{{orderId}} 🙌
 
-Payment complete hone ke baad screenshot yahin WhatsApp par bhej dena.
+To pay now: {{booking}}
+The remaining {{remaining}} once your piece is ready.
 
-⚠️ Payment screenshot zaroor bhejna.`,
-    en: `Order #{{orderId}} is ready ❤️
+{{payTo}}
 
-Total Amount: {{total}}
-
-Pay here:
-
-{{link}}
-
-Once you have paid, send the screenshot here on WhatsApp.
-
-⚠️ The payment screenshot is required.`,
+Send the screenshot here after paying — I'll verify it and confirm your booking.`,
   },
   {
     key: 'waitingForPayment',
     category: 'payment',
     label: 'Payment reminder',
     description: 'They wrote again while an order is still unpaid.',
-    placeholders: ['orderId', 'total', 'link'],
+    placeholders: ['orderId', 'total', 'payTo'],
     hi: `Bhai order #{{orderId}} abhi payment ka wait kar raha hai.
 
 Total: {{total}}
 
-Payment link:
-{{link}}
+{{payTo}}
 
 Payment ke baad screenshot yahin bhej dena 🙏`,
     en: `Order #{{orderId}} is still waiting for payment.
 
 Total: {{total}}
 
-Payment link:
-{{link}}
+{{payTo}}
 
 Please send the screenshot here once you have paid 🙏`,
   },
@@ -596,16 +670,84 @@ Please send the screenshot here once you have paid 🙏`,
     label: 'Screenshot received',
     description: 'Their payment proof arrived. Nothing is confirmed yet.',
     placeholders: [],
-    hi: `Payment proof mil gaya bhai ❤️
+    hi: `Thank you bhai ❤️
 
-Abhi hamari team payment verify karegi.
+Payment proof mil gaya.
 
-Thoda sa wait karo 🙏`,
-    en: `Got your payment proof ❤️
+Main abhi apne agent se confirm karwa raha hoon - bas thodi hi der me bata deta hoon 🙏`,
+    en: `Thank you ❤️
 
-Our team will verify it now.
+Got your payment proof.
 
-Please give us a moment 🙏`,
+I'm getting it confirmed with my agent right now - I'll let you know in just a bit 🙏`,
+  },
+  {
+    key: 'confirmSwitch',
+    category: 'flow',
+    label: 'Switching to another item?',
+    /**
+     * Asked, not assumed.
+     *
+     * A customer half way through buying the Spider-Man who types "venom"
+     * might be changing their mind - or might be asking a question about it,
+     * or comparing, or have typed it by accident. Switching outright throws
+     * away the colour and size they already chose; asking costs one line and
+     * makes the shop sound like it is listening.
+     */
+    description:
+      'They named a different item while already choosing one. Confirms the switch before dropping what they had picked.',
+    placeholders: ['item'],
+    hi: `{{item}} ki baat kar rahe ho bhai? 🤔
+
+Haan bolo to wahi dikha deta hoon.`,
+    en: `Did you mean {{item}}? 🤔
+
+Say yes and I'll pull it up.`,
+  },
+  {
+    key: 'paymentProofRead',
+    category: 'payment',
+    label: 'Screenshot received, amount read off it',
+    /**
+     * Sent instead of the plain acknowledgement when the screenshot could
+     * actually be read.
+     *
+     * Every word here is about the PICTURE, never about the money: it says
+     * what the screenshot shows, not what the shop has received. A customer
+     * who is told "₹500 mil gaya" believes the transfer has landed, and if
+     * the screenshot was edited, of somebody else's payment, or simply of a
+     * failed attempt, the shop has just confirmed a payment it never got.
+     *
+     * So it repeats the figure back and says a person is checking, which is
+     * exactly what is true at that moment.
+     */
+    description:
+      'Proof arrived and the amount was legible. States what the image SHOWS - never that payment is received or confirmed.',
+    placeholders: ['amount'],
+    hi: `Thank you bhai ❤️
+
+Screenshot mil gaya, usme ₹{{amount}} dikh raha hai.
+
+Main abhi apne agent se confirm karwa raha hoon - bas thodi hi der me bata deta hoon 🙏`,
+    en: `Thank you ❤️
+
+Got your screenshot - it shows ₹{{amount}}.
+
+I'm getting it confirmed with my agent right now - I'll let you know in just a bit 🙏`,
+  },
+  {
+    key: 'proofNotAPayment',
+    category: 'payment',
+    label: 'Image received, but not a payment screenshot',
+    description:
+      'They sent a picture while a payment was pending and it was not a payment screen. Ask, never accuse.',
+    placeholders: [],
+    hi: `Image mil gayi bhai, par ye payment screenshot nahi lag rahi 🤔
+
+Payment ki screenshot bhej do, main verify karwa deta hoon 🙏`,
+    en: `Got the image, but it doesn't look like a payment screenshot 🤔
+
+Could you send the payment screenshot? I'll get it verified 🙏`,
   },
   {
     key: 'verificationPending',
@@ -700,6 +842,141 @@ Someone from our team will assist you personally.
 
 Please hold on 🙏`,
   },
+  // ------------------------------------------------------------------ FAQ
+  //
+  // Answers to the things customers actually ask. Each one is a fixed
+  // sentence the owner can edit, never something the bot works out: price,
+  // wait, material, COD and pickup are exactly the facts that must not be
+  // improvised. The values inside come from the catalogue and app_settings.
+  {
+    key: 'priceAnswer',
+    category: 'faq',
+    label: 'Price asked',
+    description: 'Customer asked the price before choosing. Answer, then carry on.',
+    placeholders: ['item', 'price', 'booking', 'remaining'],
+    hi: `{{item}} {{price}} ka hai.
+
+{{booking}} dekar size reserve ho jata hai
+{{remaining}} tab, jab piece ready ho jaye.`,
+    en: `The {{item}} is {{price}}.
+
+{{booking}} to reserve your size
+{{remaining}} remaining once it's ready.`,
+  },
+  {
+    key: 'refundAnswer',
+    category: 'faq',
+    label: 'Refund / return / exchange asked',
+    description: 'Never answered by the bot - a person handles money going back.',
+    placeholders: [],
+    hi: `Refund, return ya exchange ke liye aapko hamare agent se baat karni hogi 🙏
+
+Main abhi unko bata deta hoon, wo aapse jald baat karenge.`,
+    en: `For a refund, return or exchange you'll need to speak to our agent 🙏
+
+I'm letting them know now — they'll get back to you shortly.`,
+  },
+  {
+    key: 'priceFixedAnswer',
+    category: 'faq',
+    label: 'Customer asks for a discount',
+    description: 'Polite, warm, and firm. The price does not move.',
+    placeholders: ['item', 'price', 'booking'],
+    hi: `Bhai {{item}} ka price fix hai — {{price}}. Ismein discount nahi hota 🙏
+
+{{booking}} dekar size reserve ho jata hai.`,
+    en: `The {{item}} is fixed at {{price}} — we don't do discounts 🙏
+
+{{booking}} reserves your size.`,
+  },
+  {
+    key: 'whichPhoto',
+    category: 'faq',
+    label: 'Photo asked, but of what?',
+    description: 'They asked to see something before choosing a design. Ask which one - never guess.',
+    placeholders: ['products'],
+    hi: `Kaunse ki photo chahiye bhai?
+
+{{products}}`,
+    en: `Which one would you like to see?
+
+{{products}}`,
+  },
+  {
+    key: 'photoHere',
+    category: 'faq',
+    label: 'Sending a product photo',
+    description: 'Sent just before the picture itself, so the arrow points at it.',
+    placeholders: ['item'],
+    hi: `Ye {{item}} hai bhai 👇`,
+    en: `Here is the {{item}} 👇`,
+  },
+  {
+    key: 'noPhoto',
+    category: 'faq',
+    label: 'No photo available',
+    description: 'The shop has no picture of this one. Never send another product instead.',
+    placeholders: ['item'],
+    hi: `{{item}} ki photo abhi mere paas nahi hai bhai 😅`,
+    en: `I do not have a photo of the {{item}} right now 😅`,
+  },
+  {
+    key: 'materialAnswer',
+    category: 'faq',
+    label: 'Material / quality asked',
+    description: 'Kept short and natural, as the sales memory asks.',
+    placeholders: ['material'],
+    hi: `{{material}} 👌`,
+    en: `{{material}} 👌`,
+  },
+  {
+    key: 'waitingTimeAnswer',
+    category: 'faq',
+    label: 'Waiting time asked',
+    description: 'Only ever sent when asked - never volunteered.',
+    placeholders: ['leadTime'],
+    hi: `Booking ke baad piece manufacturing me chala jata hai.
+{{leadTime}}`,
+    en: `After booking, it goes into manufacturing.
+{{leadTime}}`,
+  },
+  {
+    key: 'codAnswer',
+    category: 'faq',
+    label: 'COD asked',
+    description: 'Only sent when asked. COD is never offered on its own.',
+    placeholders: ['charge', 'total'],
+    hi: `COD ho jayega, {{charge}} extra lagega — total {{total}}.`,
+    en: `COD is available with an extra {{charge}} — {{total}} in total.`,
+  },
+  {
+    key: 'limitedPiecesAnswer',
+    category: 'faq',
+    label: 'Stock / limited pieces asked',
+    description: 'States the lot honestly. No fake urgency, ever.',
+    placeholders: ['lotNote'],
+    hi: `{{lotNote}}`,
+    en: `{{lotNote}}`,
+  },
+  {
+    key: 'hoodieBrandsAnswer',
+    category: 'faq',
+    label: 'Hoodie brands asked',
+    description: 'Brands we carry. Anything else is "on request", not a promise.',
+    placeholders: ['brands'],
+    hi: `Hoodies me: {{brands}}`,
+    en: `For hoodies we have: {{brands}}`,
+  },
+  {
+    key: 'locationAnswer',
+    category: 'faq',
+    label: 'Location / shipping / pickup asked',
+    placeholders: ['city', 'shipping'],
+    hi: `Hum {{city}} me hain.
+{{shipping}}`,
+    en: `We're based in {{city}}.
+{{shipping}}`,
+  },
   {
     key: 'help',
     category: 'closing',
@@ -754,20 +1031,51 @@ function cacheKey(key, language) {
   return `${key}:${language}`;
 }
 
+/**
+ * One language's rows, through the shared cache.
+ *
+ * Split by language so the key matches the rest of the scheme
+ * (`repli:templates:hi`) and the panel can later drop just the language it
+ * edited. Two small queries instead of one is not a cost worth avoiding.
+ */
+async function rowsFor(language, force) {
+  const key = cache.KEYS.templates(language);
+  if (force) await cache.del(key);
+
+  return cache.remember(key, config.TEMPLATE_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from('message_templates')
+      .select('key,body')
+      .eq('language', language);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
+}
+
 /** Reload the owner's edits. Cheap: one small table, cached for TTL_MS. */
 async function refresh(force = false) {
   if (!force && Date.now() - loadedAt < TTL_MS) return overrides;
 
-  const { data, error } = await supabase.from('message_templates').select('key,language,body');
-  if (error) {
+  try {
+    const lists = await Promise.all(LANGUAGES.map((language) => rowsFor(language, force)));
+    const next = new Map();
+    LANGUAGES.forEach((language, index) => {
+      for (const row of lists[index]) next.set(cacheKey(row.key, language), row.body);
+    });
+    overrides = next;
+    loadedAt = Date.now();
+  } catch (err) {
     // Keep serving whatever we had; defaults still work if we never loaded.
-    logger.error('templates.load_failed', { error: error.message });
-    return overrides;
+    logger.error('templates.load_failed', { error: err.message });
   }
 
-  overrides = new Map((data || []).map((row) => [cacheKey(row.key, row.language), row.body]));
-  loadedAt = Date.now();
   return overrides;
+}
+
+/** Memory is cleared synchronously inside cache.delPrefix(), before any await. */
+async function invalidate() {
+  loadedAt = 0;
+  await cache.delPrefix(cache.KEYS.templatesPrefix);
 }
 
 function startTemplateSync(intervalMs = TTL_MS) {
@@ -862,6 +1170,7 @@ module.exports = {
   LANGUAGES,
   render,
   refresh,
+  invalidate,
   ensureTemplates,
   startTemplateSync,
 };

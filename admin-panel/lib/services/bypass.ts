@@ -1,4 +1,5 @@
 import { logAdminAction } from '@/lib/audit';
+import { invalidateBypass } from '@/lib/cache';
 import type { AdminSession } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { normalisePhone } from '@/lib/utils/format';
@@ -56,6 +57,10 @@ export async function addBypass(
     details: { name: data.name, active: data.active },
   });
 
+  // The most important cache in the shop: a bypassed number must go silent
+  // now, not in ten seconds.
+  await invalidateBypass();
+
   return data;
 }
 
@@ -86,6 +91,8 @@ export async function updateBypass(
     details: patch,
   });
 
+  await invalidateBypass();
+
   return data;
 }
 
@@ -105,4 +112,6 @@ export async function removeBypass(id: string, admin: AdminSession): Promise<voi
     entityType: 'bypass',
     entityId: existing?.phone ?? id,
   });
+
+  await invalidateBypass();
 }

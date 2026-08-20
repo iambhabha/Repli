@@ -5,26 +5,38 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Badge, StockBadge } from '@/components/ui/Badge';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/States';
 import { toast } from '@/components/ui/Toast';
 import { api } from '@/lib/api/client';
 import { cn } from '@/lib/utils/cn';
 import { formatCurrency } from '@/lib/utils/format';
+import type { Category } from '@/lib/services/categories';
 import { stockLevel, type ProductWithVariants } from '@/types/product';
 
 interface ProductDraft {
   id?: string;
+  hasImage?: boolean;
   code: string;
   name: string;
+  design: string;
   description: string;
   emoji: string;
   price: string;
+  bookingAmount: string;
+  category: string;
+  brand: string;
+  keywords: string;
+  madeToOrder: boolean;
+  codAvailable: boolean;
+  codCharge: string;
   active: boolean;
 }
 
 interface VariantDraft {
   id?: string;
+  hasImage?: boolean;
   productId: string;
   color: string;
   size: string;
@@ -36,9 +48,17 @@ interface VariantDraft {
 const EMPTY_PRODUCT: ProductDraft = {
   code: '',
   name: '',
+  design: '',
   description: '',
   emoji: '',
   price: '',
+  bookingAmount: '',
+  category: 'tshirt',
+  brand: 'AESTHURA',
+  keywords: '',
+  madeToOrder: false,
+  codAvailable: false,
+  codCharge: '',
   active: true,
 };
 
@@ -49,9 +69,11 @@ const EMPTY_PRODUCT: ProductDraft = {
 export function ProductTable({
   products,
   threshold,
+  categories,
 }: {
   products: ProductWithVariants[];
   threshold: number;
+  categories: Category[];
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(products[0]?.id ?? null);
@@ -66,9 +88,18 @@ export function ProductTable({
       const payload = {
         code: productDraft.code,
         name: productDraft.name,
+        design: productDraft.design,
         description: productDraft.description,
         emoji: productDraft.emoji,
         price: Number(productDraft.price || 0),
+        bookingAmount: Number(productDraft.bookingAmount || 0),
+        category: productDraft.category,
+        brand: productDraft.brand,
+        // Sent as typed; the server splits, trims and de-duplicates.
+        keywords: productDraft.keywords,
+        madeToOrder: productDraft.madeToOrder,
+        codAvailable: productDraft.codAvailable,
+        codCharge: Number(productDraft.codCharge || 0),
         active: productDraft.active,
       };
 
@@ -188,11 +219,20 @@ export function ProductTable({
                       onClick={() =>
                         setProductDraft({
                           id: product.id,
+                          hasImage: Boolean(product.image_path),
                           code: product.code,
                           name: product.name,
+                          design: product.design ?? '',
                           description: product.description ?? '',
                           emoji: product.emoji ?? '',
                           price: String(product.price),
+                          bookingAmount: String(product.booking_amount ?? 0),
+                          category: product.category ?? 'tshirt',
+                          brand: product.brand ?? 'AESTHURA',
+                          keywords: (product.keywords ?? []).join(', '),
+                          madeToOrder: product.made_to_order ?? false,
+                          codAvailable: product.cod_available ?? false,
+                          codCharge: String(product.cod_charge ?? 0),
                           active: product.active,
                         })
                       }
@@ -252,6 +292,7 @@ export function ProductTable({
                                     onClick={() =>
                                       setVariantDraft({
                                         id: variant.id,
+                                        hasImage: Boolean(variant.image_path),
                                         productId: product.id,
                                         color: variant.color ?? '',
                                         size: variant.size ?? '',
@@ -360,16 +401,145 @@ export function ProductTable({
               />
             </Field>
 
-            <Field label="Price (₹)">
+            {/**
+              * Only on a saved product. The upload endpoint is keyed by id,
+              * so there is nowhere to put a file until the row exists - and
+              * inventing a two-step "save then upload" flow inside one modal
+              * would be worse than asking the owner to press Save once.
+              */}
+            {productDraft.id === undefined ? (
+              <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                <strong className="font-medium text-foreground">Photo:</strong> save the product
+                first, then reopen it from the list to upload one. The upload needs a saved product
+                to attach itself to.
+              </p>
+            ) : null}
+
+            {productDraft.id ? (
+              <ImageUpload
+                endpoint={`/api/products/${productDraft.id}/image`}
+                hasImage={Boolean(productDraft.hasImage)}
+                label="Product photo"
+                hint="Sent when a customer asks to see it. PNG, JPEG or WebP, under 5 MB."
+                onChange={(hasImage) => setProductDraft((draft) => (draft ? { ...draft, hasImage } : draft))}
+              />
+            ) : null}
+
+            <Field label="Design name">
               <input
                 className="input"
-                type="number"
-                min={0}
-                value={productDraft.price}
-                onChange={(event) => setProductDraft({ ...productDraft, price: event.target.value })}
-                placeholder="699"
+                value={productDraft.design}
+                onChange={(event) => setProductDraft({ ...productDraft, design: event.target.value })}
+                placeholder="Spider-Man"
               />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                What the customer picks by. Leave empty to use the product name.
+              </span>
             </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Category">
+                <select
+                  className="input"
+                  value={productDraft.category}
+                  onChange={(event) =>
+                    setProductDraft({ ...productDraft, category: event.target.value })
+                  }
+                >
+                  {categories.map((category) => (
+                    <option key={category.key} value={category.key}>
+                      {category.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Decides which menu it appears under.
+                </span>
+              </Field>
+              <Field label="Brand">
+                <input
+                  className="input"
+                  value={productDraft.brand}
+                  onChange={(event) =>
+                    setProductDraft({ ...productDraft, brand: event.target.value })
+                  }
+                  placeholder="3POINTER.CLUB"
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Price (₹)">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  value={productDraft.price}
+                  onChange={(event) => setProductDraft({ ...productDraft, price: event.target.value })}
+                  placeholder="2499"
+                />
+              </Field>
+              <Field label="Booking amount (₹)">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  value={productDraft.bookingAmount}
+                  onChange={(event) =>
+                    setProductDraft({ ...productDraft, bookingAmount: event.target.value })
+                  }
+                  placeholder="500"
+                />
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Paid now to reserve a size. 0 = full price up front.
+                </span>
+              </Field>
+            </div>
+
+            <Field label="Customer words for this design">
+              <input
+                className="input"
+                value={productDraft.keywords}
+                onChange={(event) =>
+                  setProductDraft({ ...productDraft, keywords: event.target.value })
+                }
+                placeholder="spidey, red wali, spider man"
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Comma separated. The bot matches these as well as the name — this is how it
+                learns a new product without a code change.
+              </span>
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="COD charge (₹)">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  value={productDraft.codCharge}
+                  onChange={(event) =>
+                    setProductDraft({ ...productDraft, codCharge: event.target.value })
+                  }
+                  placeholder="200"
+                  disabled={!productDraft.codAvailable}
+                />
+              </Field>
+              <div className="space-y-3 pt-6">
+                <Toggle
+                  label="COD available"
+                  hint="Only mentioned if the customer asks."
+                  checked={productDraft.codAvailable}
+                  onChange={(codAvailable) => setProductDraft({ ...productDraft, codAvailable })}
+                />
+                <Toggle
+                  label="Made to order"
+                  hint="No stock is held; every size is subject to confirmation."
+                  checked={productDraft.madeToOrder}
+                  onChange={(madeToOrder) => setProductDraft({ ...productDraft, madeToOrder })}
+                />
+              </div>
+            </div>
 
             <Toggle
               label="Active"
@@ -440,6 +610,23 @@ export function ProductTable({
                 }
               />
             </Field>
+
+            {variantDraft.id === undefined ? (
+              <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                <strong className="font-medium text-foreground">Photo:</strong> save this variant
+                first, then reopen it to add a photo of this exact colour.
+              </p>
+            ) : null}
+
+            {variantDraft.id ? (
+              <ImageUpload
+                endpoint={`/api/variants/${variantDraft.id}/image`}
+                hasImage={Boolean(variantDraft.hasImage)}
+                label="Colour photo"
+                hint="Shown instead of the product photo when this colour is the one being asked about."
+                onChange={(hasImage) => setVariantDraft((draft) => (draft ? { ...draft, hasImage } : draft))}
+              />
+            ) : null}
 
             <Toggle
               label="Active"

@@ -1,4 +1,5 @@
 import { logAdminAction } from '@/lib/audit';
+import { invalidateStock } from '@/lib/cache';
 import type { AdminSession } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { BadRequest } from '@/lib/utils/http';
@@ -149,6 +150,9 @@ export async function changeStock(
       after: next,
     },
   });
+
+  // Stock only - the catalogue cache holds the product row, not the count.
+  await invalidateStock(current.product_id);
 
   return data;
 }

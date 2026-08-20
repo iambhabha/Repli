@@ -39,6 +39,36 @@ function enqueue(phone, task) {
   return next;
 }
 
+/**
+ * "typing…" for the length of the turn, and not one millisecond longer.
+ *
+ * Held here rather than anywhere deeper because this is the only place that
+ * knows when a turn begins and ends. The state machine sends messages from a
+ * dozen branches; if any of them owned the indicator, the first branch to
+ * finish would switch it off while the rest was still working.
+ *
+ * Both helpers tolerate a bot that has no typing support at all - the test
+ * suite drives a hand-written adapter, and a presence update must never be
+ * something the shop depends on.
+ */
+const typingOn = async (bot, phone) => {
+  try {
+    if (bot && bot.typing) await bot.typing.begin(phone);
+  } catch (err) {
+    logger.warn('typing.begin_failed', { phone, error: err.message });
+  }
+};
+
+const typingOff = async (bot, phone) => {
+  try {
+    if (bot && bot.typing) await bot.typing.end(phone);
+  } catch (err) {
+    // Swallowed on purpose: this runs in a finally, and it must never
+    // replace the error already on its way up.
+    logger.warn('typing.end_failed', { phone, error: err.message });
+  }
+};
+
 function shouldIgnore(msg) {
   if (!msg) return 'empty';
   if (msg.fromMe) return 'own_message';
@@ -46,6 +76,29 @@ function shouldIgnore(msg) {
   if (msg.isStatus) return 'status_broadcast';
   if (!config.normalisePhone(msg.phone)) return 'no_phone';
   if (!msg.isMedia && !String(msg.text || '').trim()) return 'empty_body';
+  return null;
+}
+
+/**
+ * A first message that is really an advert, not a customer.
+ *
+ * The shop's number receives a steady trickle of broadcasts from other
+ * businesses - AstroTalk app links, CRED support notices, "this number is no
+ * longer active, use this link". The bot was greeting every one of them:
+ * paying for two AI calls, creating a conversation row, and putting a
+ * stranger's promo into the customer list.
+ *
+ * The tell is the opening line. Real customers open with a few words -
+ * "hi", "tshirt chahiye", "spider man wali hai?" - not with a URL or a
+ * paragraph. This only ever applies to the FIRST message of a conversation,
+ * so a customer who later sends a link is unaffected.
+ */
+const LINK = /https?:\/\/|wa\.me\/|bit\.ly\//i;
+
+function looksAutomated(text) {
+  const body = String(text || '');
+  if (LINK.test(body)) return 'promo_link';
+  if (body.length > 400) return 'bulk_message';
   return null;
 }
 
@@ -84,6 +137,47 @@ function createRouter(bot) {
       }
     }
 
+    /**
+     * The customer pasted our own message back.
+     *
+     * WhatsApp makes this easy to do by accident, and it caused a real mess:
+     * the bot answered its own prompt, then stored it as a delivery address.
+     * An echo is never an instruction, so it is dropped before anything else
+     * looks at it.
+     */
+    if (!isAdmin && !msg.isMedia) {
+      const body = String(msg.text || '').trim();
+      if (body.length >= 25) {
+        const ours = await messageService.recentOutgoing(phone).catch(() => []);
+        const same = (a, b) =>
+          a.replace(/\s+/g, ' ').trim().slice(0, 60).toLowerCase() ===
+          b.replace(/\s+/g, ' ').trim().slice(0, 60).toLowerCase();
+        if (ours.some((sent) => same(sent, body))) {
+          logger.info('message.echo_ignored', { phone });
+          return;
+        }
+      }
+    }
+
+    // ---- test mode: only these numbers -----------------------------------
+    // Admins are exempt so the owner can always drive the bot themselves.
+    if (!isAdmin && !(await settingsService.isAllowed(phone))) {
+      logger.info('message.not_allowed', { phone, action: 'allowlist' });
+      return;
+    }
+
+    // ---- adverts from other businesses ----------------------------------
+    if (!isAdmin && !msg.isMedia) {
+      const automated = looksAutomated(msg.text);
+      if (automated) {
+        const existing = await conversationService.exists(phone).catch(() => true);
+        if (!existing) {
+          logger.info('message.automated', { phone, action: automated });
+          return;
+        }
+      }
+    }
+
     // ---- duplicate protection -------------------------------------------
     if (!(await messageService.claimIncoming({ ...msg, phone }))) {
       logger.info('message.duplicate', { phone, action: String(msg.id) });
@@ -96,6 +190,17 @@ function createRouter(bot) {
       const started = Date.now();
       let before = { state: 'START', mode: 'BOT' };
 
+      /**
+       * On before any work, off in the finally below.
+       *
+       * Everything between the two is what the customer is waiting through:
+       * the conversation read, the language decision, the state machine, its
+       * database calls, any model call, the guards, and the fallback when a
+       * guard rejects. No artificial delay is added anywhere - the indicator
+       * lasts exactly as long as the thinking does.
+       */
+      await typingOn(bot, phone);
+
       try {
         before = await conversationService.get(phone);
         let action;
@@ -107,9 +212,19 @@ function createRouter(bot) {
          * kept afterwards, because "ok" / "yes" / "M" look identical in both
          * languages and a per-message detector would flip mid-chat.
          */
-        const lang = language.resolve(before.data && before.data.lang, msg.isMedia ? '' : msg.text);
+        const lang = await language.resolveSmart(
+          before.data && before.data.lang,
+          msg.isMedia ? '' : msg.text
+        );
         const localBot = Object.create(bot);
         localBot.t = messages.for(lang);
+        // Read back by the adapter when it rewrites a reply, so the first
+        // message of a conversation is rewritten in the language we just
+        // decided rather than the one saved at the end of the turn.
+        localBot.lang = lang;
+        // The sender's WhatsApp profile name, for the steps that would
+        // otherwise ask for something WhatsApp already told us.
+        localBot.pushName = msg.pushName || '';
 
         if (isAdmin) {
           await adminService.handleAdminMessage(bot, msg);
@@ -141,6 +256,11 @@ function createRouter(bot) {
         });
       } catch (err) {
         await onError(bot, phone, msg, before, err);
+      } finally {
+        // Guaranteed: a model timeout, a database outage, a thrown guard, a
+        // handler that fell over completely - the customer never sits
+        // watching a shop that is typing and never speaks.
+        await typingOff(bot, phone);
       }
     });
   };

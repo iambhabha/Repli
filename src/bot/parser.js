@@ -50,14 +50,53 @@ const NUMBER_WORDS = {
   das: 10, dus: 10, ten: 10, 'दस': 10,
 };
 
-/** Extra spellings, keyed on the product `code` column. */
+/**
+ * Extra spellings, keyed on the product `code` column.
+ *
+ * Note what is deliberately absent: plain "tshirt" and "hoodie". A design is
+ * the choice, and "I need a T-shirt" names a category, not a design - it has
+ * to fall through so the bot shows both designs and lets the customer pick,
+ * which is exactly what the sales memory asks for. The colour words are here
+ * because for these products the colour IS the design: one is the red one,
+ * the other is the black one.
+ */
 const PRODUCT_KEYWORDS = {
-  TS001: [
-    'tshirt', 'tshirts', 't shirt', 't shirts', 'shirt', 'shirts', 'tee', 'tees',
-    'tisht', 'टीशर्ट', 'टी शर्ट', 'शर्ट',
+  'AES-TS-SPIDER': [
+    'spiderman', 'spider man', 'spider', 'spidey', 'red tshirt', 'red t shirt',
+    'lal tshirt', 'स्पाइडरमैन',
   ],
-  BAG001: ['bag', 'bags', 'baig', 'jhola', 'purse', 'backpack', 'बैग', 'झोला'],
+  'AES-TS-VENOM': [
+    'venom', 'vennom', 'black tshirt', 'black t shirt', 'kala tshirt', 'वेनम',
+  ],
+  'AES-HD-BAPE-S': ['bape single', 'single hood', 'single hoodie', 'bape single hood'],
+  'AES-HD-BAPE-D': ['bape double', 'double hood', 'double hoodie', 'bape double hood'],
+
+  // Retired demo catalogue, kept so old conversations still resolve.
+  TS001: ['tshirt', 'tshirts', 't shirt', 'tee', 'tees', 'टीशर्ट'],
+  BAG001: ['bag', 'bags', 'baig', 'jhola', 'बैग'],
 };
+
+/**
+ * Category words. "T-shirt chahiye" must show the T-shirt designs and
+ * nothing else - not the hoodies, and not a guess at which design.
+ */
+const CATEGORY_KEYWORDS = {
+  tshirt: ['tshirt', 'tshirts', 't shirt', 't shirts', 'shirt', 'shirts', 'tee', 'tees', 'टीशर्ट', 'टी शर्ट'],
+  hoodie: ['hoodie', 'hoodies', 'hood', 'hoody', 'sweatshirt', 'हुडी'],
+  bag: ['bag', 'bags', 'baig', 'jhola', 'backpack', 'बैग'],
+};
+
+/** Returns 'tshirt' | 'hoodie' | 'bag' | null. */
+function detectCategory(text) {
+  const t = normalize(text);
+  if (!t) return null;
+  for (const [category, words] of Object.entries(CATEGORY_KEYWORDS)) {
+    for (const word of words) {
+      if (word.includes(' ') ? hasPhrase(t, word) : hasWord(t, word)) return category;
+    }
+  }
+  return null;
+}
 
 const COLOR_KEYWORDS = {
   Black: ['black', 'blk', 'kala', 'kaala', 'kali', 'kaali', 'काला', 'काली'],
@@ -91,7 +130,158 @@ const CUSTOMER_COMMANDS = {
   address: ['address', 'pata'],
 };
 
-const isNo = (text) => hasAnyWord(text, NO_WORDS);
+/**
+ * Questions the shop answers from fixed facts.
+ *
+ * These are checked before the sales flow so that "kitne ka hai?" in the
+ * middle of choosing a size is answered rather than read as a size. Order
+ * matters: the first match wins, so the specific patterns sit above the
+ * general ones.
+ */
+const FAQ_PATTERNS = [
+  /**
+   * Bargaining. Sits first so it beats the price pattern - "kam se kam
+   * kitne ka doge" is a negotiation, not a price question, and answering it
+   * with the price alone reads as an invitation to keep pushing.
+   */
+  [
+    'refund',
+    [
+      /\brefund/, /\breffund/, /\brefnd/, /paisa wapas/, /paise wapas/,
+      /\breturn/, /\bexchange/, /\breplace/, /order cancel karna/,
+      /wapas kar/, /wapis kar/, /money back/, /cancel karke paisa/,
+    ],
+  ],
+  [
+    'bargain',
+    [
+      /\bdiscount\b/, /\boffer\b/, /\bsale\b/, /\bchhut\b/, /\bchoot\b/,
+      /kam (kar|karo|kardo|kr|hoga|hogi|me|mein|karke)/, /kuch kam/, /thoda kam/,
+      /\bsasta/, /\bsaste/, /last price/, /best price/, /final price/,
+      /lowest price/, /kam se kam/, /\bbargain/, /price kam/, /rate kam/,
+      /\bnegotiab/, /kam nahi hoga/, /\bcheap/, /kam me de/, /me de do/,
+      /\bkam karo\b/, /\bkam kar do\b/,
+    ],
+  ],
+  /**
+   * "photo bhej do", "red wali kaisi lagegi" - a request to SEE the thing.
+   *
+   * Deliberately specific. "kaise ho bhai" is a greeting, not a photo
+   * request, so only phrasings that are unambiguously about appearance are
+   * listed here; anything vaguer is left to the model, which has the whole
+   * sentence to judge by.
+   */
+  [
+    'image',
+    [
+      /\bphotos?\b/, /\bpics?\b/, /\bpictures?\b/, /\bimages?\b/, /\bsnaps?\b/,
+      /\btasveer/, /\bfoto/,
+      /dikha ?(do|o|dijiye|de)\b/, /dikhao/, /dekhna hai/, /dekh sakta/,
+      /kaisi lag(egi|ti|ta)/, /kaisa lag(ega|ta)/, /kaisi dikh/, /kaisa dikh/,
+      /show me/, /can i see/, /let me see/, /send.{0,12}(photo|pic|image)/,
+    ],
+  ],
+  ['cod', [/\bcod\b/, /cash on delivery/, /delivery pe (paisa|payment)/, /ghar pe pay/]],
+  [
+    'waiting',
+    [
+      /\b(delivery|shipping) (time|days)\b/, /kitne din/, /kitna time/, /how (long|many days)/,
+      /\bwaiting\b/, /kab (tak )?(milega|aayega|ayega)/, /when will i get/, /\bdispatch\b/,
+    ],
+  ],
+  [
+    'material',
+    [
+      /\bmaterial\b/, /\bfabric\b/, /\bcotton\b/, /\bquality\b/, /kapda/, /kaisa hai/,
+      /\bprint\b/, /kaisi quality/,
+    ],
+  ],
+  [
+    // No bare "deliver" or "shipping", and no city names: "haan bhai deliver
+    // kar do" is a customer confirming an order, and it was being answered
+    // with the shop's address while the YES never reached the order step.
+    'location',
+    [
+      /\bpickup\b/, /\bpick up\b/, /\bshop (kahan|kaha|address)/, /\bstore kahan/,
+      /\b(aap|tum|shop|store) kahan (ho|hai|se)/, /\bwhere are you\b/,
+      /\byour location\b/, /\blocation kya\b/, /\bkahan se ho\b/,
+      /\bdeliver karte ho\b/, /\bdelivery kahan\b/, /\bship (karte|karoge)\b/,
+    ],
+  ],
+  ['stock', [/\bstock\b/, /\blimited\b/, /\bavailable hai\b/, /\blot\b/, /\bsold out\b/, /bach(a|e) hai/]],
+  // Only question forms. "bape single hood M" is a customer choosing a
+  // product and a size, not asking which brands the shop carries - and
+  // answering it with a brand list buried the size they had just given.
+  [
+    'brands',
+    [
+      /kaunsi brand/, /konsi brand/, /which brand/, /brand kaunsi/,
+      /\bbrands? (hai|hain|available|kya|do you|are)\b/, /kaun kaun si brand/,
+    ],
+  ],
+  [
+    'price',
+    [
+      /\bprice\b/, /\brate\b/, /\bcost\b/, /kitne? ka/, /kitne? ki/, /kitna hai/, /how much/,
+      /\bkeemat\b/, /\bdaam\b/, /\bmrp\b/, /\bkitne rupay/,
+    ],
+  ],
+];
+
+/**
+ * Returns 'price' | 'material' | 'waiting' | 'cod' | 'location' | 'stock' |
+ * 'brands' | null.
+ */
+function detectQuestion(text) {
+  const t = normalize(text);
+  if (!t) return null;
+  for (const [topic, patterns] of FAQ_PATTERNS) {
+    if (patterns.some((re) => re.test(t))) return topic;
+  }
+  return null;
+}
+
+/**
+ * A greeting and nothing else.
+ *
+ * Needed because "Hy" arrived while the bot was collecting an address and was
+ * saved as the customer's name - it passes every name rule there is. People
+ * say hello again mid-conversation; that is not an answer to the question.
+ */
+const GREETING_WORDS = [
+  'hi', 'hii', 'hiii', 'hy', 'hey', 'heyy', 'hello', 'helo', 'hlo', 'hallo',
+  'yo', 'namaste', 'namaskar', 'salam', 'salaam', 'gm', 'gn',
+  'हाय', 'हैलो', 'नमस्ते',
+];
+
+function isGreeting(text) {
+  const list = tokens(text);
+  if (!list.length || list.length > 3) return false;
+  // Every word has to be a greeting: "hi bhai" is still just a hello,
+  // "hi my name is Rahul" is an answer.
+  return list.every((word) => GREETING_WORDS.includes(word) || word === 'bhai' || word === 'sir');
+}
+
+/**
+ * Words that mean "no" on their own but are only a tag inside a sentence.
+ *
+ * Hinglish hangs "na" on the end of agreements constantly - "haan bhej do
+ * na", "ok na", "confirm kar do na" - and reading that as a refusal turned
+ * every one of those into a cancelled order with the draft wiped.
+ */
+const TAG_WORDS = new Set(['na', 'naa', 'n']);
+
+const isNo = (text) => {
+  const list = tokens(text);
+  if (!list.length) return false;
+
+  // An unambiguous no anywhere in the message settles it.
+  if (list.some((word) => NO_WORDS.includes(word) && !TAG_WORDS.has(word))) return true;
+
+  // "na" by itself is a refusal; "…kar do na" is agreement with a tag.
+  return list.length === 1 && TAG_WORDS.has(list[0]);
+};
+
 const isYes = (text) => !isNo(text) && hasAnyWord(text, YES_WORDS);
 
 /** Quantity from free text: "2", "2 chahiye", "do piece". */
@@ -116,8 +306,22 @@ function parseMenuIndex(text, max) {
   return index >= 1 && index <= max ? index : null;
 }
 
-const keywordsForProduct = (product) =>
-  (PRODUCT_KEYWORDS[product.code] || []).concat([normalize(product.name)]);
+/**
+ * Every word this product answers to.
+ *
+ * `products.keywords` comes first: that column is edited in the admin panel,
+ * so a product added there is understood without touching this file. The
+ * table below is only a fallback for the original demo rows.
+ */
+const keywordsForProduct = (product) => {
+  const fromDatabase = Array.isArray(product.keywords) ? product.keywords.map(normalize) : [];
+  return [
+    ...fromDatabase,
+    ...(PRODUCT_KEYWORDS[product.code] || []),
+    normalize(product.design || ''),
+    normalize(product.name),
+  ].filter(Boolean);
+};
 
 /** Product named by word ("tshirt", "bag"). Plain numbers are ignored. */
 function detectProductByKeyword(text, products) {
@@ -223,19 +427,49 @@ const FIELD_LABELS = {
 /** Labelled block: "Name: Rahul\nCity: Jaipur\n..." */
 function parseLabelledDetails(text) {
   const found = {};
-  for (const line of String(text || '').split(/\r?\n/)) {
-    const match = /^\s*([^:：\-]{2,20})\s*[:：]\s*(.+?)\s*$/.exec(line);
-    if (!match) continue;
-    const label = normalize(match[1]);
-    const value = match[2].trim();
-    if (!value) continue;
+  const lines = String(text || '').split(/\r?\n/);
+
+  const assign = (rawLabel, rawValue) => {
+    const label = normalize(rawLabel);
+    const value = String(rawValue || '').trim();
+    if (!value) return;
     for (const [field, labels] of Object.entries(FIELD_LABELS)) {
       if (labels.includes(label) && !found[field]) {
         found[field] = value;
-        break;
+        return;
+      }
+    }
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    // "Name: Rahul Sharma"
+    const inline = /^\s*([^:：\-]{2,20})\s*[:：]\s*(.+?)\s*$/.exec(lines[i]);
+    if (inline) {
+      assign(inline[1], inline[2]);
+      continue;
+    }
+
+    /**
+     * "Name:" on its own line, the answer underneath.
+     *
+     * This is how the form the bot sends actually comes back - the template
+     * prints bare labels, so people reply under them. Reading only the
+     * inline form meant the whole block fell through to the positional
+     * parser, which stored "Name:" as the customer's name and "PIN Code:"
+     * as their state.
+     */
+    const bare = /^\s*([^:：\-]{2,20})\s*[:：]\s*$/.exec(lines[i]);
+    if (bare) {
+      let j = i + 1;
+      while (j < lines.length && !lines[j].trim()) j += 1;
+      // The next line has to be an answer, not the following label.
+      if (j < lines.length && !/[:：]\s*$/.test(lines[j])) {
+        assign(bare[1], lines[j]);
+        i = j;
       }
     }
   }
+
   return found;
 }
 
@@ -251,6 +485,11 @@ function parsePlainDetailBlock(text) {
     .filter(Boolean);
   if (lines.length < 5) return null;
 
+  // A line that is only a label means this is a filled-in form, and the
+  // labelled parser owns it. Splitting it positionally is what turned
+  // "PIN Code:" into somebody's state.
+  if (lines.some((line) => /[:：]\s*$/.test(line))) return null;
+
   const pin = lines[lines.length - 1].replace(/\D/g, '');
   if (!/^\d{6}$/.test(pin)) return null;
 
@@ -261,6 +500,37 @@ function parsePlainDetailBlock(text) {
   const address = rest.join(', ');
   if (!name || !address || !city || !state) return null;
   return { name, address, city, state, pin };
+}
+
+/**
+ * "payment kahan karun?" - asked while a payment is outstanding.
+ *
+ * Deliberately narrow, and deliberately NOT part of detectQuestion(): this
+ * only ever runs inside WAITING_FOR_PAYMENT, where the answer is always the
+ * same and always safe to repeat. A customer at that step who says anything
+ * resembling "where do I send it" wants the scanner back on their screen.
+ *
+ * "paid", "kar diya", "ho gaya" are excluded on purpose - those are people
+ * telling the shop they HAVE paid, and answering that with the QR again
+ * reads as not having listened.
+ */
+const WHERE_TO_PAY = [
+  /\b(kaha|kahan|kidhar|where)\b[^?]{0,24}\b(pay|payment|bhej|send|karu|karun|karna|paisa|paise)\b/i,
+  /\b(pay|payment|paisa|paise)\b[^?]{0,24}\b(kaha|kahan|kidhar|where|kaise|how)\b/i,
+  /\b(qr|scanner|barcode)\b/i,
+  /\bupi\s*(id)?\b/i,
+  /\b(gpay|g pay|phonepe|phone pe|paytm|bhim)\b/i,
+  /\bpayment\s*(details|link|number)\b/i,
+  /\bscan\s*(karne|karu|code)\b/i,
+];
+
+const ALREADY_PAID = /\b(kar diya|ho gaya|hogaya|done|paid|bhej diya|bhejdiya|sent)\b/i;
+
+function asksWhereToPay(text) {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  if (ALREADY_PAID.test(value)) return false;
+  return WHERE_TO_PAY.some((pattern) => pattern.test(value));
 }
 
 module.exports = {
@@ -277,6 +547,10 @@ module.exports = {
   detectSize,
   freeTextQuantity,
   wantsHuman,
+  isGreeting,
+  detectCategory,
+  detectQuestion,
+  asksWhereToPay,
   detectCommand,
   parseLabelledDetails,
   parsePlainDetailBlock,

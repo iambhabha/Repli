@@ -1,3 +1,4 @@
+import { invalidateSettings } from '@/lib/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { AppSettingRow } from '@/types/database';
 
@@ -9,6 +10,14 @@ export interface RepliSettings {
   shippingCharge: number;
   lowStockThreshold: number;
   botEnabled: boolean;
+  aiInstructions: string;
+  /**
+   * A storage reference to the UPI scanner, or ''. Read only from here:
+   * it is written by /api/settings/qr, which uploads the file and cleans up
+   * the old one. Deliberately absent from SettingsUpdate so a plain settings
+   * save can never blank it.
+   */
+  paymentQr: string;
 }
 
 export const SETTING_KEYS = {
@@ -17,6 +26,8 @@ export const SETTING_KEYS = {
   shippingCharge: 'shipping_charge',
   lowStockThreshold: 'low_stock_threshold',
   botEnabled: 'bot_enabled',
+  aiInstructions: 'ai_instructions',
+  paymentQr: 'payment_qr',
 } as const;
 
 const DEFAULTS: RepliSettings = {
@@ -25,6 +36,8 @@ const DEFAULTS: RepliSettings = {
   shippingCharge: 0,
   lowStockThreshold: 3,
   botEnabled: true,
+  aiInstructions: '',
+  paymentQr: '',
 };
 
 /**
@@ -48,6 +61,8 @@ export async function getSettings(): Promise<RepliSettings> {
       DEFAULTS.lowStockThreshold
     ),
     botEnabled: (map.get(SETTING_KEYS.botEnabled) ?? 'true') === 'true',
+    aiInstructions: map.get(SETTING_KEYS.aiInstructions) || DEFAULTS.aiInstructions,
+    paymentQr: map.get(SETTING_KEYS.paymentQr) || DEFAULTS.paymentQr,
   };
 }
 
@@ -78,6 +93,7 @@ export interface SettingsUpdate {
   shippingCharge?: number;
   lowStockThreshold?: number;
   botEnabled?: boolean;
+  aiInstructions?: string;
 }
 
 export async function updateSettings(update: SettingsUpdate): Promise<RepliSettings> {
@@ -97,12 +113,20 @@ export async function updateSettings(update: SettingsUpdate): Promise<RepliSetti
   if (update.botEnabled !== undefined) {
     push(SETTING_KEYS.botEnabled, update.botEnabled ? 'true' : 'false');
   }
+  if (update.aiInstructions !== undefined) {
+    // Capped because it is sent with every single AI call: a page of prose
+    // here would quietly multiply the monthly bill.
+    push(SETTING_KEYS.aiInstructions, update.aiInstructions.trim().slice(0, 1500));
+  }
 
   if (rows.length) {
     const { error } = await supabaseAdmin()
       .from('app_settings')
       .upsert(rows, { onConflict: 'key' });
     if (error) throw new Error(`settings.update: ${error.message}`);
+
+    // Only the keys that changed - the bot caches each one separately.
+    await invalidateSettings(rows.map((row) => row.key));
   }
 
   return getSettings();

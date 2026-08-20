@@ -45,7 +45,7 @@ function resolveChromePath() {
   if (explicit) {
     if (fs.existsSync(explicit)) return explicit;
     logger.warn('whatsapp.chrome_path_missing', { action: explicit });
-    console.warn(`⚠️  CHROME_PATH me diya hua browser nahi mila: ${explicit}`);
+    console.warn(`⚠️  CHROME_PATH points at a browser that does not exist: ${explicit}`);
   }
 
   for (const candidate of CHROME_CANDIDATES[process.platform] || []) {
@@ -65,12 +65,12 @@ function puppeteerOptions() {
   } else {
     console.warn(
       [
-        '⚠️  System me Chrome/Chromium nahi mila - puppeteer apna browser use karega.',
-        '   "Browser was not found" aaye toh in me se ek karo:',
-        '     Windows/Mac : Chrome install karo, ya .env me CHROME_PATH=<chrome ka path>',
+        '⚠️  No system Chrome/Chromium found - falling back to puppeteer\'s own copy.',
+        '   If you see "Browser was not found", do one of these:',
+        '     Windows/Mac : install Chrome, or set CHROME_PATH=<path to chrome> in .env',
         '     Linux/VPS   : sudo apt install -y chromium-browser',
-        '                   phir .env me CHROME_PATH=/usr/bin/chromium-browser',
-        '     Ya phir     : npx puppeteer browsers install chrome',
+        '                   then set CHROME_PATH=/usr/bin/chromium-browser in .env',
+        '     Either OS   : npx puppeteer browsers install chrome',
         '',
       ].join('\n')
     );

@@ -101,4 +101,33 @@ function resolve(stored, text) {
   return detected;
 }
 
-module.exports = { detect, resolve, LANGUAGES, DEFAULT_LANGUAGE };
+/**
+ * The same rule, with the model as a last resort.
+ *
+ * Order matters: the word lists decide whatever they can, because they are
+ * free, instant and never wrong about "chahiye". The model is asked only when
+ * they shrug AND the conversation has no language yet - which is the opening
+ * message and nothing else. "Hi" is the case this exists for: it is English,
+ * the lists have no opinion, and the old code answered it in Hinglish.
+ *
+ * Falls back to the rule answer on any AI failure, so a missing key or a slow
+ * API changes nothing except the polish.
+ */
+async function resolveSmart(stored, text) {
+  const detected = detect(text);
+  if (detected) return detected;
+  if (stored) return stored;
+
+  try {
+    // Required lazily: bot/language.js is used by tests that never touch AI.
+    const ai = require('../ai/language');
+    const guess = await ai.classify(text);
+    if (guess) return guess;
+  } catch (err) {
+    /* fall through to the default */
+  }
+
+  return DEFAULT_LANGUAGE;
+}
+
+module.exports = { detect, resolve, resolveSmart, LANGUAGES, DEFAULT_LANGUAGE };

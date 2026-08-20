@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Download } from 'lucide-react';
 
 import { CustomerTable } from '@/components/admin/CustomerTable';
 import { FilterTabs, SearchInput } from '@/components/ui/Filters';
@@ -32,6 +33,19 @@ export default async function CustomersPage({
       <PageHeader
         title="Customers"
         subtitle={`${customers.total} ${customers.total === 1 ? 'person has' : 'people have'} messaged Repli.`}
+        actions={
+          /**
+           * A plain link, not a fetch: the browser handles the download, so
+           * the file arrives even if the page is busy, and it works the same
+           * on a phone. The export always contains everyone - filters on
+           * this page do not narrow it, because a customer list you keep is
+           * only useful when it is the whole list.
+           */
+          <a href="/api/export/customers" className="btn btn-secondary" download>
+            <Download className="size-4" />
+            Excel
+          </a>
+        }
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

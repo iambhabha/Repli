@@ -9,32 +9,34 @@
  */
 
 const { supabase, unwrap } = require('../db/supabase');
+const cache = require('../db/cache');
 const config = require('../config');
 const logger = require('../logger');
 
-const TTL_MS = 10000;
+/**
+ * Everything here goes through the shared cache, so a second process - and,
+ * from Phase 2, the admin panel - can drop the same key rather than each
+ * copy waiting out its own timer. The timers themselves are unchanged.
+ */
+const BOT_ENABLED_KEY = 'bot_enabled';
 
-let adminCache = null;
-let adminCacheAt = 0;
-let botEnabledCache = null;
-let botCacheAt = 0;
-
-function invalidate() {
-  adminCache = null;
-  adminCacheAt = 0;
-  botEnabledCache = null;
-  botCacheAt = 0;
+/** Memory is cleared synchronously inside cache.del(), before any await. */
+async function invalidate() {
+  await Promise.all([
+    cache.del(cache.KEYS.admins),
+    cache.del(cache.KEYS.allowed),
+    cache.del(cache.KEYS.settings(BOT_ENABLED_KEY)),
+  ]);
 }
 
 async function adminNumbers() {
-  if (adminCache && Date.now() - adminCacheAt < TTL_MS) return adminCache;
-  const rows = unwrap(
-    await supabase.from('admin_numbers').select('phone').eq('active', true),
-    'admins.load'
-  );
-  adminCache = (rows || []).map((r) => config.normalisePhone(r.phone)).filter(Boolean);
-  adminCacheAt = Date.now();
-  return adminCache;
+  return cache.remember(cache.KEYS.admins, config.ADMIN_TTL_MS, async () => {
+    const rows = unwrap(
+      await supabase.from('admin_numbers').select('phone').eq('active', true),
+      'admins.load'
+    );
+    return (rows || []).map((r) => config.normalisePhone(r.phone)).filter(Boolean);
+  });
 }
 
 /** Fails closed: on any error nobody is treated as an admin. */
@@ -49,26 +51,97 @@ async function isAdmin(phone) {
   }
 }
 
+/**
+ * One setting, by key. For the strings the bot quotes to customers - the
+ * greeting's brand names, the pickup city - which the owner edits in the
+ * panel and which have no business being constants in code.
+ */
+/**
+ * The stored string for a settings key, or null. Cached under
+ * `repli:settings:{key}` so every reader of that key shares one entry.
+ */
+async function rawSetting(key, ttlMs = config.SETTINGS_TTL_MS) {
+  return cache.remember(cache.KEYS.settings(key), ttlMs, async () => {
+    const rows = unwrap(
+      await supabase.from('app_settings').select('value').eq('key', key).limit(1),
+      'settings.value'
+    );
+    return rows && rows[0] ? rows[0].value : null;
+  });
+}
+
+async function value(key, fallback = null) {
+  /**
+   * Cached, because these are read constantly and change rarely.
+   *
+   * The greeting alone pulled app_settings four separate times - the brand
+   * name, the bot switch, the AI instructions, the shop name - each a round
+   * trip. Thirty seconds of staleness on a setting the owner edits by hand
+   * is invisible; four extra round trips per message is not.
+   */
+  const found = await rawSetting(key);
+  return found === null || found === '' ? fallback : found;
+}
+
+/**
+ * Test mode: reply to these numbers and nobody else.
+ *
+ * `app_settings.allowed_numbers`, comma separated. Empty means the shop is
+ * open to everyone, which is the normal state. While a new flow is being
+ * tried on a live number this is the difference between testing and
+ * experimenting on real customers.
+ *
+ * Cached like the admin list - it is checked on every single message.
+ */
+async function allowedNumbers() {
+  return cache.remember(cache.KEYS.allowed, config.ADMIN_TTL_MS, async () => {
+    const raw = await value('allowed_numbers', '').catch(() => '');
+    return String(raw || '')
+      .split(/[,\s]+/)
+      .map((entry) => config.normalisePhone(entry))
+      .filter(Boolean);
+  });
+}
+
+/** True when this number may be answered. Everyone passes if the list is empty. */
+async function isAllowed(phone) {
+  // The test harness drives dozens of made-up numbers through the real
+  // router; an allowlist meant for a live number must not silence those.
+  if (config.TEST_MODE) return true;
+
+  const key = config.normalisePhone(phone);
+  if (!key) return false;
+  try {
+    const list = await allowedNumbers();
+    return list.length === 0 || list.includes(key);
+  } catch (err) {
+    logger.error('allowlist.check_failed', { phone: key, error: err.message });
+    // Fail open: a database hiccup must not silence the shop.
+    return true;
+  }
+}
+
+/**
+ * Kept on its own ten-second timer rather than the settings default: this is
+ * the switch that stops the shop replying, and it is the one setting where
+ * waiting out thirty seconds is felt.
+ */
 async function isBotEnabled() {
-  if (botEnabledCache !== null && Date.now() - botCacheAt < TTL_MS) return botEnabledCache;
-  const row = unwrap(
-    await supabase.from('app_settings').select('value').eq('key', 'bot_enabled').maybeSingle(),
-    'settings.botEnabled'
-  );
-  botEnabledCache = row ? row.value === 'true' : config.BOT_ENABLED_DEFAULT;
-  botCacheAt = Date.now();
-  return botEnabledCache;
+  const raw = await rawSetting(BOT_ENABLED_KEY, config.ADMIN_TTL_MS);
+  return raw === null ? config.BOT_ENABLED_DEFAULT : raw === 'true';
 }
 
 async function setBotEnabled(enabled) {
+  const stored = enabled ? 'true' : 'false';
   unwrap(
     await supabase
       .from('app_settings')
-      .upsert({ key: 'bot_enabled', value: enabled ? 'true' : 'false' }, { onConflict: 'key' }),
+      .upsert({ key: BOT_ENABLED_KEY, value: stored }, { onConflict: 'key' }),
     'settings.setBotEnabled'
   );
-  botEnabledCache = enabled;
-  botCacheAt = Date.now();
+  // Write through rather than invalidate: /bot off must take effect on the
+  // very next message, not after a reload.
+  await cache.set(cache.KEYS.settings(BOT_ENABLED_KEY), stored, config.ADMIN_TTL_MS);
   logger.info('bot.switch', { action: enabled ? 'ON' : 'OFF' });
   return enabled;
 }
@@ -93,7 +166,7 @@ async function syncAdminsFromEnv() {
       );
     }
   }
-  invalidate();
+  await invalidate();
   return adminNumbers();
 }
 
@@ -146,11 +219,27 @@ async function syncRuntimeConfig() {
 
 /** Picks up panel edits without a restart. */
 function startSettingsSync(intervalMs = 15000) {
-  const timer = setInterval(() => {
+  /**
+   * Once immediately, then on the timer.
+   *
+   * setInterval alone leaves a fifteen-second window after every restart in
+   * which config still holds whatever .env said - and .env says
+   * `https://your-payment-link-here`, because the real UPI id lives in
+   * app_settings where the panel can edit it. An order placed inside that
+   * window told the customer to pay at a placeholder URL.
+   *
+   * Rare, and entirely silent when it happened: the wrong link is a
+   * perfectly well-formed message, and the only sign would have been a
+   * customer asking where to pay.
+   */
+  const sync = () =>
     syncRuntimeConfig().catch((err) =>
       logger.error('settings.sync_failed', { error: err.message })
     );
-  }, intervalMs);
+
+  void sync();
+
+  const timer = setInterval(sync, intervalMs);
   if (timer.unref) timer.unref();
 
   return function stopSettingsSync() {
@@ -194,6 +283,9 @@ async function ensureDefaults() {
 }
 
 module.exports = {
+  value,
+  allowedNumbers,
+  isAllowed,
   adminNumbers,
   isAdmin,
   isBotEnabled,

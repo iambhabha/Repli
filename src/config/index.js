@@ -109,9 +109,96 @@ module.exports = {
    */
   WA_HEADLESS: bool(process.env.WA_HEADLESS, true),
 
+  /**
+   * Link with a pairing code instead of a QR image.
+   *
+   * A QR code is only valid for about a minute, which makes it useless when
+   * the terminal you can see is on a server you reach over SSH: by the time
+   * the picture reaches you it has already rotated. WhatsApp's other route -
+   * "Link with phone number instead" - gives an eight character code that is
+   * plain text and lives long enough to be read out, copied or messaged.
+   *
+   * Set this to the WhatsApp number the bot itself runs on, with country code
+   * and no symbols, e.g. WA_PAIRING_NUMBER=919799757664. Leave it empty for
+   * the usual QR flow.
+   */
+  WA_PAIRING_NUMBER: String(process.env.WA_PAIRING_NUMBER || '').replace(/\D/g, ''),
+
+  // ---- AI ----------------------------------------------------------------
+  //
+  // The AI is a coat of paint, never the brain. Prices, stock, order numbers
+  // and state transitions stay with the rule engine; the model only rewrites
+  // wording and interprets messages the rules could not read. If the key is
+  // missing, the request times out, or the monthly budget runs out, every
+  // caller falls back to the hand-written template and the shop keeps running.
+  OPENAI_API_KEY: String(process.env.OPENAI_API_KEY || '').trim(),
+
+  /**
+   * gpt-4o-mini is the deliberate default: on ~5,000 messages a month it costs
+   * roughly ₹150, where a full-size model costs ₹3,000+ for the same traffic.
+   * Override with OPENAI_MODEL if you want to trade money for polish.
+   */
+  OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  OPENAI_BASE_URL: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+
+  AI_ENABLED: bool(process.env.AI_ENABLED, true),
+
+  /** Hard ceiling. Spend crosses it, AI switches itself off until next month. */
+  AI_MONTHLY_BUDGET_INR: Math.max(0, num(process.env.AI_MONTHLY_BUDGET_INR, 1000)),
+
+  /** A customer waiting on WhatsApp will not wait long. Late reply > no reply. */
+  AI_TIMEOUT_MS: Math.max(1000, num(process.env.AI_TIMEOUT_MS, 6000)),
+
+  /** Only used to show spend in rupees; billing itself is in dollars. */
+  AI_USD_TO_INR: Math.max(1, num(process.env.AI_USD_TO_INR, 88)),
+
+  /**
+   * The private Supabase Storage bucket the shop's own files live in -
+   * product photos, the payment QR, payment screenshots. Private: every read
+   * goes through the service role or a short-lived signed URL, never a public
+   * object.
+   */
+  STORAGE_BUCKET: process.env.STORAGE_BUCKET || 'repli-media',
+
   ORDER_PREFIX: process.env.ORDER_PREFIX || 'REP',
   MAX_QTY: Math.max(1, num(process.env.MAX_QTY, 10)),
-  CATALOGUE_TTL_MS: Math.max(0, num(process.env.CATALOGUE_TTL_MS, 15000)),
+
+  /**
+   * How long each cached domain may be stale, in milliseconds.
+   *
+   * A timer is a guess about how long a wrong answer is tolerable. Now that
+   * the panel can say "that key is stale" the guess only has to cover the
+   * case where that message never arrives - so the three domains the panel
+   * actually publishes for are long, and every domain it does NOT publish for
+   * is exactly as short as it was before.
+   *
+   * Raised, because a panel write invalidates them:
+   *   catalogue   products.ts create/update publishes repli:catalogue
+   *   templates   templates.ts update/reset publishes repli:templates:{lang}
+   *   categories  nothing writes them at all - the panel has no category
+   *               editor yet, so the only way one changes is direct SQL
+   *
+   * Deliberately NOT raised:
+   *   stock       the one staleness that sells something the shop does not
+   *               have. Short whatever the invalidation does.
+   *   settings    the panel publishes only the six keys it writes. Others -
+   *               greeting_brands, allowed_numbers, the lead times - are
+   *               edited straight in Supabase and have no publisher.
+   *   faq         those keys have no panel write path at all.
+   *   bypass      covered, but this is the list that keeps the bot from
+   *               replying to the owner's family. Ten seconds costs one tiny
+   *               query; being wrong costs more than that.
+   *   admins /    no publisher exists for either.
+   *   allowed
+   */
+  CATALOGUE_TTL_MS: Math.max(0, num(process.env.CATALOGUE_TTL_MS, 300000)),
+  STOCK_TTL_MS: Math.max(0, num(process.env.STOCK_TTL_MS, 15000)),
+  CATEGORY_TTL_MS: Math.max(0, num(process.env.CATEGORY_TTL_MS, 300000)),
+  SETTINGS_TTL_MS: Math.max(0, num(process.env.SETTINGS_TTL_MS, 30000)),
+  TEMPLATE_TTL_MS: Math.max(0, num(process.env.TEMPLATE_TTL_MS, 300000)),
+  BYPASS_TTL_MS: Math.max(0, num(process.env.BYPASS_TTL_MS, 10000)),
+  FAQ_TTL_MS: Math.max(0, num(process.env.FAQ_TTL_MS, 30000)),
+  ADMIN_TTL_MS: Math.max(0, num(process.env.ADMIN_TTL_MS, 10000)),
 
   normalisePhone,
 };

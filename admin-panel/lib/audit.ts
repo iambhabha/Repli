@@ -23,7 +23,10 @@ export type AuditAction =
   | 'MESSAGE_SENT'
   | 'SETTINGS_UPDATED'
   | 'TEMPLATE_UPDATED'
-  | 'TEMPLATE_RESET';
+  | 'TEMPLATE_RESET'
+  | 'CATEGORY_CREATED'
+  | 'CATEGORY_UPDATED'
+  | 'CATEGORY_DEACTIVATED';
 
 interface AuditInput {
   actor: string;

@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/env';
+import { isConfigured, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/env';
 
 /**
  * Two jobs, in this order:
@@ -16,6 +16,10 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/env';
  */
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
+
+  // Not configured yet: let the request through so the page can say so,
+  // instead of failing here with a Supabase error nobody can act on.
+  if (!isConfigured()) return response;
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {

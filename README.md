@@ -590,10 +590,59 @@ you are on.
 
 ---
 
-## 17. Not in v1 (by design)
+## 17. AI layer (optional)
 
-No AI/LLM, no embeddings, no RAG, no LangChain, no n8n, no multi-item cart, no
-automatic payment verification.
+Off by default. With `OPENAI_API_KEY` empty the bot runs exactly as it always
+did: templates, rule parser, no network calls, no cost.
 
-If AI is ever added it should only be a fallback for messages the rule engine
-cannot classify — the rule engine stays in charge.
+With a key it does **two** jobs, and deliberately no others.
+
+**1. It rewrites replies so they sound human.** The rule engine still decides
+what to say — which product, which price, which order id, what happens next.
+The model only changes the wording. Every rewrite is then checked against the
+original before it leaves (`src/ai/humanise.js`):
+
+| Check | Why |
+|---|---|
+| every number in the original survives, no new number appears | stops an invented price, quantity or order id |
+| links byte-identical, same count | a payment link is not a place for creativity |
+| length ≤ 1.8× the original | a rewrite that grew has usually added a promise |
+
+Fail any check and the original template is sent. `npm run test:ai` covers this.
+
+**2. It reads messages the parser could not.** `src/ai/understand.js` is handed
+the options the shop actually has — real products, real colours, real sizes —
+and returns one of them or nothing. Anything off the list is discarded. It
+answers no one and decides nothing; the state machine continues as if the
+customer had typed the plain word.
+
+One place is deliberately excluded: confirming an order. The model may resolve
+"no" at the summary step but never "yes", because a wrong "yes" places an order
+the customer never agreed to.
+
+**Not humanised:** admin messages (recipient is checked in the adapter) and
+replies typed by a person in the panel.
+
+### Cost
+
+`gpt-4o-mini` is the default for a reason:
+
+| Traffic | gpt-4o-mini | full-size model |
+|---|---|---|
+| 5,000 messages/month | ~₹120 | ~₹3,000 |
+
+Identical replies are rewritten once and cached for 6 hours, so a welcome
+message going to 500 customers costs one call, not 500.
+
+`AI_MONTHLY_BUDGET_INR` (default 1000) is a hard fuse, not a warning. Every
+call is written to `ai_usage`, month-to-date spend is checked before each
+request, and once it crosses the limit the AI switches itself off until the 1st
+— the shop keeps running on templates. See `src/services/aiUsageService.js`.
+
+Timeouts (`AI_TIMEOUT_MS`, default 6s), HTTP errors and a missing key all fall
+back to the template. There is no path where the AI failing stops a reply.
+
+## 18. Not in v1 (by design)
+
+No embeddings, no RAG, no LangChain, no n8n, no multi-item cart, no automatic
+payment verification.

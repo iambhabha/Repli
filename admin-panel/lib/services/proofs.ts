@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { REPLI_PROOFS_BUCKET, REPLI_ROOT } from '@/lib/env';
+import { parseReference, signedUrl } from '@/lib/storage';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export type ProofLocation =
@@ -21,17 +22,30 @@ const CONTENT_TYPES: Record<string, string> = {
 
 /**
  * The bot stores payment screenshots on its own disk (mode 0600, outside any
- * web root) and only records the relative path - a deliberate privacy choice
- * in src/services/paymentService.js. So "View proof" has three cases:
+ * web root) and records the relative path, and - since migration 017 - also
+ * uploads a copy to the shop's private bucket and records that reference.
+ * So "View proof" has these cases, in order:
  *
- *   1. proof_url is already a link            -> use it
- *   2. a private Storage bucket is configured -> hand out a short-lived signed URL
- *   3. the panel runs beside the bot          -> stream the file off disk
+ *   1. a storage: reference               -> a short-lived signed URL
+ *   2. proof_url is already a link        -> use it
+ *   3. REPLI_PROOFS_BUCKET is configured  -> signed URL from that bucket
+ *   4. the panel runs beside the bot      -> stream the file off disk
  *
- * When none apply (typical Vercel deployment, proofs on a laptop) we say so
- * plainly instead of showing a broken image.
+ * The reference is what makes the panel work from Vercel at all; everything
+ * below it is kept because proofs recorded before 017 have only a path, and
+ * those must keep opening.
  */
-export async function resolveProof(proofUrl: string | null): Promise<ProofLocation> {
+export async function resolveProof(
+  proofUrl: string | null,
+  proofObject: string | null = null
+): Promise<ProofLocation> {
+  // Preferred, and the only one that works when the panel and the bot are on
+  // different machines. Validated as a reference - never treated as a URL.
+  if (parseReference(proofObject)) {
+    const url = await signedUrl(proofObject, 300);
+    if (url) return { kind: 'url', url };
+  }
+
   const value = (proofUrl ?? '').trim();
 
   if (!value) {

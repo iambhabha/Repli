@@ -4,6 +4,7 @@ import { Loader2, Power } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { ImageUpload } from '@/components/ui/ImageUpload';
 import { toast } from '@/components/ui/Toast';
 import { api } from '@/lib/api/client';
 import { cn } from '@/lib/utils/cn';
@@ -20,6 +21,7 @@ export function SettingsForm({ settings }: { settings: RepliSettings }) {
     paymentLink: settings.paymentLink,
     shippingCharge: String(settings.shippingCharge),
     lowStockThreshold: String(settings.lowStockThreshold),
+    aiInstructions: settings.aiInstructions,
   });
   const [saving, setSaving] = useState(false);
   const [botEnabled, setBotEnabled] = useState(settings.botEnabled);
@@ -34,6 +36,7 @@ export function SettingsForm({ settings }: { settings: RepliSettings }) {
         paymentLink: form.paymentLink,
         shippingCharge: Number(form.shippingCharge || 0),
         lowStockThreshold: Number(form.lowStockThreshold || 0),
+        aiInstructions: form.aiInstructions,
       });
       toast('Settings saved.');
       router.refresh();
@@ -130,6 +133,19 @@ export function SettingsForm({ settings }: { settings: RepliSettings }) {
           </span>
         </label>
 
+        {/**
+          * The scanner, which is what people actually pay with on a phone.
+          * The link above is untouched and remains the fallback: no QR, or a
+          * QR the bot cannot fetch, and the customer simply gets the text as
+          * they always did.
+          */}
+        <ImageUpload
+          endpoint="/api/settings/qr"
+          hasImage={Boolean(settings.paymentQr)}
+          label="Payment QR"
+          hint="Sent after the payment message. Without one the UPI link above is used on its own."
+        />
+
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="label">Shipping charge (₹)</span>
@@ -153,6 +169,38 @@ export function SettingsForm({ settings }: { settings: RepliSettings }) {
             />
             <span className="mt-1 block text-xs text-muted-foreground">
               Variants at or below this count show as LOW STOCK.
+            </span>
+          </label>
+        </div>
+
+        {/* ------------------------------------------------ AI voice */}
+        <div className="border-t border-border pt-5">
+          <h2 className="text-sm font-semibold text-foreground">How Repli should talk</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Written in plain language, added to the AI&apos;s instructions on every reply. Use it
+            for tone, not for facts.
+          </p>
+
+          <label className="mt-3 block">
+            <textarea
+              className="input min-h-32 resize-y font-normal"
+              value={form.aiInstructions}
+              onChange={(event) => setForm({ ...form, aiInstructions: event.target.value })}
+              maxLength={1500}
+              placeholder={[
+                'Examples:',
+                '- Keep replies to two lines.',
+                '- Call customers "bhai".',
+                '- No emojis.',
+                '- Always thank them after a booking.',
+              ].join('\n')}
+            />
+            <span className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                Prices, stock and order numbers are never taken from here — the bot reads those
+                from the catalogue, and a rewrite that changes one is thrown away.
+              </span>
+              <span className="shrink-0 tabular-nums">{form.aiInstructions.length}/1500</span>
             </span>
           </label>
         </div>

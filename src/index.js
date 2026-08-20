@@ -19,6 +19,8 @@ const { createAdapter } = require('./whatsapp/adapter');
 const { createRouter } = require('./bot/router');
 const templates = require('./bot/templates');
 const { startOutboxWorker } = require('./outbox/worker');
+const { startInvalidationListener } = require('./db/invalidate');
+const storage = require('./db/storage');
 
 async function preflight() {
   for (const dir of [config.DATA_DIR, config.LOGS_DIR, config.PROOFS_DIR]) {
@@ -49,6 +51,16 @@ async function preflight() {
   if (!botOn) {
     warnings.push('Bot abhi OFF hai. Chalu karne ke liye admin se: /bot on');
   }
+
+  /**
+   * Is the file bucket still configured the way the code needs?
+   *
+   * Configuration lives in a dashboard, outside review, and the last time
+   * nobody read it back an ordinary JPEG payment proof was being silently
+   * refused for three phases. Warn only: a Storage problem must never stop
+   * the shop selling, and every one of these degrades gracefully.
+   */
+  warnings.push(...(await storage.checkBucket().catch(() => [])));
 
   for (const warning of warnings) {
     logger.warn('preflight', { message: warning });
@@ -94,6 +106,14 @@ async function main() {
   // Message wording is edited in the panel; pick those edits up live.
   const stopTemplateSync = templates.startTemplateSync();
 
+  /**
+   * Prices, stock and settings are edited in the panel too - but those are
+   * cached, and a timer is a poor way to learn that a price changed. This
+   * listens for "that key is stale" from the panel instead. One long-lived
+   * listener per process, never one per message.
+   */
+  const invalidation = startInvalidationListener();
+
   let shuttingDown = false;
   const shutdown = async (signal) => {
     if (shuttingDown) return;
@@ -102,6 +122,7 @@ async function main() {
     stopOutbox();
     stopSettingsSync();
     stopTemplateSync();
+    invalidation.stop();
     await bot.stop().catch(() => {});
     process.exit(0);
   };
@@ -116,10 +137,10 @@ async function main() {
 if (require.main === module) {
   main().catch((err) => {
     logger.error('repli.start_failed', { error: err && (err.stack || err.message) });
-    console.error('\n❌ Repli start nahi ho paya:', err && err.message);
+    console.error('\n❌ Repli failed to start:', err && err.message);
     if (String(err && err.message).includes('Supabase')) {
       console.error(
-        '   → .env me SUPABASE_URL / SUPABASE_SECRET_KEY check karo, aur `npm run migrate` chalao.\n'
+        '   → Check SUPABASE_URL / SUPABASE_SECRET_KEY in .env, then run `npm run migrate`.\n'
       );
     }
     process.exit(1);

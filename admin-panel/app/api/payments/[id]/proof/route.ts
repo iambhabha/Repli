@@ -23,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ ok: false, error: 'Payment not found.' }, { status: 404 });
     }
 
-    const location = await resolveProof(payment.proof_url);
+    const location = await resolveProof(payment.proof_url, payment.proof_object);
 
     if (location.kind === 'url') {
       return NextResponse.redirect(location.url);

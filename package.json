@@ -8,7 +8,20 @@
     "start": "node src/index.js",
     "mock": "node src/index.js --driver=mock",
     "migrate": "node scripts/migrate.js",
-    "test": "node tests/flow.test.js"
+    "test": "node tests/flow.test.js",
+    "test:ai": "node tests/ai.test.js",
+    "test:cache": "node tests/cache.test.js",
+    "test:invalidate": "node tests/invalidate.test.js",
+    "test:converse": "node tests/converse.test.js",
+    "test:context": "node tests/context.test.js",
+    "test:catalogue": "node tests/catalogue.test.js",
+    "test:storage": "node tests/storage.test.js",
+    "test:panel": "node tests/panel.test.js",
+    "backfill-proofs": "node scripts/backfill-proofs.js",
+    "verify:storage": "node scripts/verify-storage.js",
+    "audit:storage": "node scripts/audit-storage.js",
+    "test:authz": "node tests/authz.test.js",
+    "test:typing": "node tests/typing.test.js"
   },
   "engines": {
     "node": ">=20"

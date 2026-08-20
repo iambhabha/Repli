@@ -21,10 +21,40 @@ const numberedList = (items) =>
 
 const pieces = (n) => (n === 1 ? '1 piece' : `${n} pieces`);
 
+/**
+ * "🔴 Spider-Man — Red" — how the sales memory wants options shown.
+ *
+ * Designs are listed, not numbered products with prices. The customer picks a
+ * design by name; the price is not part of this list on purpose, because the
+ * agent must never lead with it.
+ */
+/**
+ * "1️⃣ 👕 T-Shirts" - numbered, because a category is chosen by number as
+ * often as by name, and the emoji and label both come from the database.
+ */
+const categoryList = (categories) =>
+  categories
+    .map((category, index) => {
+      const number = NUM_EMOJI[index] || `${index + 1}.`;
+      return `${number} ${category.emoji ? `${category.emoji} ` : ''}${category.label}`;
+    })
+    .join('\n');
+
+const designList = (products) =>
+  products
+    .map((product) => {
+      const name = product.design || product.name;
+      const colour = product.colour || product.color;
+      return `${product.emoji || '•'} ${name}${colour ? ` — ${colour}` : ''}`;
+    })
+    .join('\n');
+
 /** "Black T-Shirt - L" / "Black Bag" */
 function describe(productName, color, size) {
   const parts = [];
-  if (color) parts.push(color);
+  // "Default" is the placeholder for a product with no colour of its own.
+  // It belongs in the database, never in a sentence a customer reads.
+  if (color && color !== 'Default') parts.push(color);
   parts.push(productName);
   if (size) parts.push(`- ${size}`);
   return parts.join(' ');
@@ -36,16 +66,80 @@ const itemOf = (order) =>
 /** Optional "Size: M" line - empty for products that have no sizes. */
 const sizeLine = (size) => (size ? `Size: ${size}` : '');
 
+/** The typed payment destination, for when there is no scanner to send. */
+const payToText = () =>
+  config.PAYMENT_LINK
+    ? `UPI: ${config.PAYMENT_LINK}`
+    : '[PAYMENT LINK ABHI SET NAHI HUA]';
+
+/**
+ * An empty {{payTo}} leaves the blank lines that were around it behind.
+ * Two blank lines in a row is not a paragraph break, it is a gap.
+ */
+const collapseBlankLines = (text) =>
+  String(text).replace(/[\r\n]{3,}/g, '\n\n').trim();
+
 function createPack(language) {
   const t = (key, vars) => templates.render(key, language, vars);
 
   return {
     language,
 
-    welcome: (products) => t('welcome', { products: numberedList(products.map((p) => p.name)) }),
+    greeting: (brands) => t('greeting', { brands }),
 
-    productNotUnderstood: (products) =>
-      t('productNotUnderstood', { products: numberedList(products.map((p) => p.name)) }),
+    chooseCategory: (categories) => t('chooseCategory', { categories: categoryList(categories) }),
+
+    categoryNotUnderstood: (categories) =>
+      t('categoryNotUnderstood', { categories: categoryList(categories) }),
+
+    welcome: (products) => t('welcome', { products: designList(products) }),
+
+    productNotUnderstood: (products) => t('productNotUnderstood', { products: designList(products) }),
+
+    // ---- answers to questions, straight from the business memory --------
+    //
+    // Every one of these is a fixed string the owner can edit. Nothing here
+    // is generated, because "never invent details" applies hardest to the
+    // facts customers ask about: price, wait, material, COD, pickup.
+
+    priceAnswer: (product) =>
+      t('priceAnswer', {
+        item: product.design || product.name,
+        price: money(product.price),
+        booking: money(product.booking_amount),
+        remaining: money(Number(product.price || 0) - Number(product.booking_amount || 0)),
+      }),
+
+    refundAnswer: () => t('refundAnswer', {}),
+
+    priceFixedAnswer: (product) =>
+      t('priceFixedAnswer', {
+        item: product.design || product.name,
+        price: money(product.price),
+        booking: money(product.booking_amount),
+      }),
+
+    whichPhoto: (products) =>
+      t('whichPhoto', {
+        products: products
+          .map((p, i) => `${i + 1}. ${p.emoji || ''} ${p.design || p.name}`.trim())
+          .join('\n'),
+      }),
+
+    photoHere: (product) => t('photoHere', { item: product.design || product.name }),
+    noPhoto: (product) => t('noPhoto', { item: product.design || product.name }),
+
+    materialAnswer: (text) => t('materialAnswer', { material: text }),
+    waitingTimeAnswer: (text) => t('waitingTimeAnswer', { leadTime: text }),
+    limitedPiecesAnswer: (text) => t('limitedPiecesAnswer', { lotNote: text }),
+    hoodieBrandsAnswer: (text) => t('hoodieBrandsAnswer', { brands: text }),
+    locationAnswer: (city, note) => t('locationAnswer', { city, shipping: note }),
+
+    codAnswer: (product) =>
+      t('codAnswer', {
+        charge: money(product.cod_charge),
+        total: money(Number(product.price || 0) + Number(product.cod_charge || 0)),
+      }),
 
     chooseColor: (product, colors) =>
       t('chooseColor', { emoji: product.emoji || '', colors: numberedList(colors) }),
@@ -63,8 +157,20 @@ function createPack(language) {
 
     sizeNotUnderstood: (sizes) => t('sizeNotUnderstood', { sizes: sizes.join(' / ') }),
 
-    available: (product, color, size, price) =>
-      t('available', { item: describe(product.name, color, size), price: money(price) }),
+    /**
+     * Design and size are locked in, so this is where price is finally
+     * allowed to appear - together with the booking split, because "₹2,499"
+     * on its own reads like money due today and it is not.
+     */
+    available: (product, color, size, price) => {
+      const booking = Number(product.booking_amount || 0);
+      return t('available', {
+        item: describe(product.design || product.name, color, size),
+        price: money(price),
+        booking: money(booking),
+        remaining: money(Number(price || 0) - booking),
+      });
+    },
 
     outOfStock: (product, color, size, sizesLeft) => {
       const item = describe(product.name, color, size);
@@ -99,6 +205,10 @@ function createPack(language) {
         state: saved.state,
         pin: saved.pin,
       }),
+
+    confirmName: (name) => t('confirmName', { name }),
+
+    askDetailsKnownName: (name) => t('askDetailsKnownName', { name }),
 
     askField(field) {
       const key = {
@@ -143,21 +253,48 @@ function createPack(language) {
 
     yesOrNo: () => t('yesOrNo', {}),
 
-    paymentInstructions: (order) =>
-      t('paymentInstructions', {
-        orderId: order.order_id,
-        total: money(order.total),
-        link: config.PAYMENT_LINK || '[PAYMENT LINK ABHI SET NAHI HUA]',
-      }),
+    /**
+     * Where to pay - the scanner, or words, never both.
+     *
+     * `scanner` says a QR image is going out with this message, and when one
+     * is the typed UPI id is left out entirely. Sending both gave the
+     * customer two payment destinations for one payment, and this shop's two
+     * did not even match: the text named one account and the QR another.
+     *
+     * The words are the fallback, not the default. A shop with no QR set, or
+     * a bucket that would not answer, must still tell somebody where to send
+     * money - a booking message with no destination at all is worse than an
+     * ugly one.
+     */
+    paymentInstructions: (order, { scanner = false } = {}) =>
+      collapseBlankLines(
+        t('paymentInstructions', {
+          orderId: order.order_id,
+          total: money(order.total),
+          // What is due right now. Falls back to the full total for anything
+          // sold outright, so the message is never silent about the amount.
+          booking: money(order.booking_amount || order.total),
+          remaining: money(order.remaining_amount || 0),
+          payTo: scanner ? '' : payToText(),
+        })
+      ),
 
-    waitingForPayment: (order) =>
-      t('waitingForPayment', {
-        orderId: order.order_id,
-        total: money(order.total),
-        link: config.PAYMENT_LINK || '[PAYMENT LINK ABHI SET NAHI HUA]',
-      }),
+    waitingForPayment: (order, { scanner = false } = {}) =>
+      collapseBlankLines(
+        t('waitingForPayment', {
+          orderId: order.order_id,
+          total: money(order.total),
+          payTo: scanner ? '' : payToText(),
+        })
+      ),
+
+    confirmSwitch: (item) => t('confirmSwitch', { item }),
 
     paymentProofReceived: () => t('paymentProofReceived', {}),
+
+    paymentProofRead: (amount) => t('paymentProofRead', { amount }),
+
+    proofNotAPayment: () => t('proofNotAPayment', {}),
 
     verificationPending: (order) => t('verificationPending', { orderId: order.order_id }),
 

@@ -88,7 +88,9 @@ async function drain(bot) {
     if (!(await claim(row))) continue;
 
     try {
-      await bot.sendMessage(row.phone, row.text);
+      // raw: a person typed this in the panel. Rewriting someone's own words
+      // on their behalf is not help, it is putting words in their mouth.
+      await bot.sendMessage(row.phone, row.text, { raw: true });
       sent += 1;
       logger.info('outbox.sent', {
         phone: row.phone,

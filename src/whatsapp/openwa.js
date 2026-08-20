@@ -180,6 +180,16 @@ module.exports = function openwaDriver() {
         : client.sendFile(chatId, dataUrl, name, caption || '');
     },
 
+    /**
+     * @open-wa exposes simulateTyping(chatId, boolean). Feature-detected
+     * rather than assumed: this driver is kept for reference and no longer
+     * connects, so nothing here may depend on an API being present.
+     */
+    setTyping(phone, on) {
+      if (!client || typeof client.simulateTyping !== 'function') return Promise.resolve();
+      return Promise.resolve(client.simulateTyping(chatIdFor(phone), Boolean(on))).catch(() => {});
+    },
+
     markAsRead(messageId, phone) {
       if (!client || !client.sendSeen) return Promise.resolve();
       return client.sendSeen(chatIdFor(phone));

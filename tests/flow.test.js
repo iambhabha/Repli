@@ -27,9 +27,11 @@ console.log = () => {}; // quieten the bot during the run
 const config = require('../src/config');
 const { supabase } = require('../src/db/supabase');
 const { createRouter } = require('../src/bot/router');
+const storage = require('../src/db/storage');
 const conversationService = require('../src/services/conversationService');
 const settingsService = require('../src/services/settingsService');
 const bypassService = require('../src/services/bypassService');
+const categoryService = require('../src/services/categoryService');
 const productService = require('../src/services/productService');
 const orderService = require('../src/services/orderService');
 
@@ -128,6 +130,25 @@ async function cleanup() {
   const { data: orders } = await supabase.from('orders').select('id').like('phone', like);
   const orderIds = (orders || []).map((o) => o.id);
   if (orderIds.length) {
+    /**
+     * The screenshots these orders produced go to the shop's bucket as well
+     * as to disk, and deleting the payment row does not delete the object.
+     * Left alone, every run of this suite added a few more files nobody
+     * pointed at - `npm run audit:storage` found thirty-six of them.
+     *
+     * Only objects belonging to THIS suite's own orders, resolved from the
+     * rows about to be deleted. Nothing here guesses at a key.
+     */
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('proof_object')
+      .in('order_id', orderIds)
+      .not('proof_object', 'is', null);
+
+    for (const payment of payments || []) {
+      await storage.remove(payment.proof_object).catch(() => {});
+    }
+
     await supabase.from('payments').delete().in('order_id', orderIds);
     await supabase.from('order_items').delete().in('order_id', orderIds);
     await supabase.from('orders').delete().in('id', orderIds);
@@ -163,16 +184,20 @@ async function main() {
   await supabase.from('admin_numbers').insert({ phone: ADMIN, name: 'test admin' });
   settingsService.invalidate();
 
+  // AESTHURA catalogue. Real lot quantities are set by the owner in the
+  // panel and start at 0, so the suite sets its own and puts them back.
   const originalStock = {
-    'TS-BLK-L': await stockBySku('TS-BLK-L'),
-    'TS-BLK-XXL': await stockBySku('TS-BLK-XXL'),
-    'TS-WHT-L': await stockBySku('TS-WHT-L'),
-    'BAG-BLK': await stockBySku('BAG-BLK'),
+    'AES-TS-SPIDER-L': await stockBySku('AES-TS-SPIDER-L'),
+    'AES-TS-SPIDER-XXL': await stockBySku('AES-TS-SPIDER-XXL'),
+    'AES-TS-VENOM-L': await stockBySku('AES-TS-VENOM-L'),
+    'AES-TS-VENOM-M': await stockBySku('AES-TS-VENOM-M'),
+    'AES-HD-BAPE-S-L': await stockBySku('AES-HD-BAPE-S-L'),
   };
-  await setStock('TS-BLK-L', 3);
-  await setStock('TS-BLK-XXL', 2);
-  await setStock('TS-WHT-L', 0);
-  await setStock('BAG-BLK', 15);
+  await setStock('AES-TS-SPIDER-L', 3);
+  await setStock('AES-TS-SPIDER-XXL', 2);
+  await setStock('AES-TS-VENOM-L', 0); // sold out, for the alternatives test
+  await setStock('AES-TS-VENOM-M', 4);
+  await setStock('AES-HD-BAPE-S-L', 5);
   await settingsService.setBotEnabled(true);
 
   try {
@@ -192,9 +217,11 @@ async function main() {
 
     await test('3. products and stock load from the database', async () => {
       const products = await productService.activeProducts();
-      assert.ok(products.length >= 2, 'expected T-Shirt and Bag');
-      assert.strictEqual(await productService.stockOf(
-        (await productService.getByCode('TS001')).id, 'Black', 'L'), 3);
+      assert.ok(products.length >= 2, 'expected the AESTHURA designs');
+      const spider = await productService.getByCode('AES-TS-SPIDER');
+      assert.strictEqual(Number(spider.price), 2499);
+      assert.strictEqual(Number(spider.booking_amount), 500);
+      assert.strictEqual(await productService.stockOf(spider.id, 'Red', 'L'), 3);
     });
 
     group('— bypass (critical) —');
@@ -226,7 +253,7 @@ async function main() {
     await test('6. /bypass list and /bypass remove work', async () => {
       contains(await say(ADMIN, '/bypass list'), FRIEND);
       contains(await say(ADMIN, `/bypass remove ${FRIEND}`), 'hat gaya');
-      contains(await say(FRIEND, 'hi'), 'Welcome');
+      contains(await say(FRIEND, 'hi'), 'T-Shirts');
     });
 
     group('— bot switch & admin auth —');
@@ -237,7 +264,7 @@ async function main() {
       assert.strictEqual(await say(c, 'hi'), '', 'bot must be silent when off');
       contains(await say(ADMIN, '/stock'), 'STOCK'); // admin still works
       contains(await say(ADMIN, '/bot on'), 'ON');
-      contains(await say(c, 'hi'), 'Welcome');
+      contains(await say(c, 'hi'), 'T-Shirts');
     });
 
     await test('8. admin command from a non-admin does nothing', async () => {
@@ -249,88 +276,217 @@ async function main() {
 
     group('— sales flow —');
 
-    await test('9. new customer gets the welcome menu', async () => {
+    await test('9. new customer gets a greeting, then the categories', async () => {
       const reply = await say(CUSTOMER, 'Hi');
-      contains(reply, 'Welcome');
-      contains(reply, 'T-Shirt');
-      contains(reply, 'Bag');
+      // The greeting names the shop, and that name is a settings row - so
+      // the test reads it from there rather than hardcoding today's brand.
+      const { data: brand } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'greeting_brands')
+        .maybeSingle();
+      contains(reply, brand?.value ?? '3POINTER.CLUB');
+      contains(reply, 'T-Shirts'); // categories, straight from the database
+      contains(reply, 'Hoodies');
+      assert.ok(!reply.includes('Spider-Man'), 'designs come after a category is chosen');
+      assert.ok(!reply.includes('2499'), `price must not be led with:\n${reply}`);
+      assert.strictEqual(await stateOf(CUSTOMER), 'SELECT_CATEGORY');
+    });
+
+    await test('9b. a category with nothing to sell is not offered', async () => {
+      /**
+       * Written against whichever category the shop CAN currently sell,
+       * then emptied on purpose.
+       *
+       * This used to assert that "Bags" never appeared, because the Bags
+       * row had no products the day it was written. The day the shop
+       * stocked a bag the test failed - and it had found no bug, only its
+       * own assumption about live data. What it is actually for is the
+       * rule that a sold-out category stays hidden, so it now creates the
+       * sold-out category itself and puts the stock back afterwards.
+       */
+      const categories = await categoryService.availableCategories();
+      assert.ok(categories.length >= 2, 'this test needs two sellable categories');
+
+      const victim = categories[categories.length - 1];
+      const inCategory = (await productService.activeProducts()).filter(
+        (item) => item.category === victim.key
+      );
+      // A made-to-order product is sellable with no stock at all, so it
+      // could never be emptied this way.
+      if (inCategory.some((item) => item.made_to_order)) return;
+
+      const saved = [];
+      for (const item of inCategory) {
+        for (const variant of await productService.variantsOf(item.id)) {
+          saved.push({ id: variant.id, qty: variant.stock_quantity });
+        }
+      }
+      assert.ok(saved.length, 'the chosen category needs variants to empty');
+
+      try {
+        for (const row of saved) {
+          await supabase.from('product_variants').update({ stock_quantity: 0 }).eq('id', row.id);
+        }
+        await productService.invalidate();
+
+        const reply = await say(phone(31), 'hello');
+        assert.ok(!reply.includes(victim.label), 'a sold-out category must stay hidden: ' + reply);
+      } finally {
+        for (const row of saved) {
+          await supabase
+            .from('product_variants')
+            .update({ stock_quantity: row.qty })
+            .eq('id', row.id);
+        }
+        await productService.invalidate();
+      }
+    });
+
+    await test('9c. picking a category by number shows only its designs', async () => {
+      const reply = await say(CUSTOMER, '1');
+      contains(reply, 'Spider-Man');
+      contains(reply, 'Venom');
+      assert.ok(!reply.includes('BAPE'), 'hoodies belong to the other category');
       assert.strictEqual(await stateOf(CUSTOMER), 'SELECT_PRODUCT');
     });
 
-    await test('10. T-Shirt -> colour -> size -> quantity', async () => {
-      contains(await say(CUSTOMER, 'tshirt'), 'color');
-      assert.strictEqual(await stateOf(CUSTOMER), 'SELECT_COLOR');
-      contains(await say(CUSTOMER, 'black'), 'Size');
+    await test('10. "I need a T-shirt" shows both designs, picks neither', async () => {
+      const reply = await say(CUSTOMER, 'I need a t-shirt');
+      contains(reply, 'Spider-Man');
+      contains(reply, 'Venom');
+      assert.ok(!reply.includes('2499'), 'still no price at this stage');
+      assert.strictEqual(await stateOf(CUSTOMER), 'SELECT_PRODUCT');
+    });
+
+    await test('11. design -> size (colour is implied, never asked)', async () => {
+      const reply = await say(CUSTOMER, 'spiderman');
+      contains(reply, 'size');
+      assert.ok(!/colou?r\?/i.test(reply), `colour must not be asked:\n${reply}`);
       assert.strictEqual(await stateOf(CUSTOMER), 'SELECT_SIZE');
+    });
+
+    await test('12. size chosen -> price and the booking split appear', async () => {
       const reply = await say(CUSTOMER, 'size L');
-      contains(reply, 'available hai');
-      contains(reply, '₹699');
-      assert.strictEqual(await stateOf(CUSTOMER), 'SELECT_QUANTITY');
+      contains(reply, '2499');
+      contains(reply, '500');
+      contains(reply, '1999');
+      assert.strictEqual(await stateOf(CUSTOMER), 'COLLECT_DETAILS');
     });
 
-    await test('11. "black tshirt chahiye" fills product + colour in one message', async () => {
+    await test('13. "venom chahiye" jumps straight to the size question', async () => {
       const c = phone(12);
-      const reply = await say(c, 'bhai reel wali black tshirt chahiye');
-      contains(reply, 'Black T-Shirt available hai');
-      contains(reply, 'Size bata do');
+      const reply = await say(c, 'bhai venom wali chahiye');
+      contains(reply, 'size');
       assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
-    });
-
-    await test('12. Bag skips colour and size', async () => {
-      const c = phone(13);
-      await say(c, 'hi');
-      const reply = await say(c, 'bag chahiye');
-      contains(reply, 'available hai');
-      contains(reply, '₹999');
-      assert.strictEqual(await stateOf(c), 'SELECT_QUANTITY');
-    });
-
-    await test('13. invalid colour is rejected', async () => {
-      const c = phone(14);
-      await say(c, 'hi');
-      await say(c, 'tshirt');
-      const reply = await say(c, 'purple');
-      contains(reply, 'color samajh nahi aaya');
-      assert.strictEqual(await stateOf(c), 'SELECT_COLOR');
     });
 
     await test('14. invalid size is rejected', async () => {
       const c = phone(15);
       await say(c, 'hi');
-      await say(c, 'tshirt');
-      await say(c, 'black');
+      await say(c, 'spiderman');
       const reply = await say(c, 'XXXL');
-      contains(reply, 'size samajh nahi aaya');
+      // The wording is the model's now, so assert behaviour: it names the
+      // real sizes and asks again, and the customer stays on the step.
+      assert.ok(/S.*M.*L/i.test(reply), `should list the sizes:
+${reply}`);
+      assert.ok(reply.includes('?'), `should ask again:
+${reply}`);
       assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
     });
 
     await test('15. out-of-stock size is refused with alternatives', async () => {
       const c = phone(16);
       await say(c, 'hi');
-      await say(c, 'tshirt');
-      await say(c, 'white');
+      await say(c, 'venom');
       const reply = await say(c, 'L');
       contains(reply, 'out of stock');
-      contains(reply, 'Dusra size try kar sakte ho');
       assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
     });
 
-    await test('16. quantity above stock offers the available count', async () => {
+    await test('16. hoodie: no colour question, sizes only', async () => {
       const c = phone(17);
       await say(c, 'hi');
-      await say(c, 'tshirt');
-      await say(c, 'black');
-      await say(c, 'xxl');
-      contains(await say(c, '7'), 'sirf 2 pieces available');
-      assert.strictEqual(await stateOf(c), 'SELECT_QUANTITY');
-      contains(await say(c, 'haan'), 'details');
-      assert.strictEqual((await conversationService.get(c)).quantity, 2);
+      const reply = await say(c, 'bape single hood');
+      contains(reply, 'size');
+      assert.ok(!/colou?r\?/i.test(reply), 'hoodies have no colour to pick');
+      assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
+
+      const priced = await say(c, 'L');
+      contains(priced, '3999');
+      contains(priced, '1500'); // BAPE booking
+      contains(priced, '2499'); // remaining
+    });
+
+    group('— questions are answered where they are asked —');
+
+    await test('16b. price asked mid-flow: answered, flow not lost', async () => {
+      const c = phone(28);
+      await say(c, 'hi');
+      await say(c, 'spiderman');
+      assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
+
+      const reply = await say(c, 'bhai kitne ka hai?');
+      contains(reply, '2499');
+      contains(reply, '500');
+      assert.strictEqual(await stateOf(c), 'SELECT_SIZE', 'a question must not reset the flow');
+
+      contains(await say(c, 'L'), '2499'); // and the flow carries on
+    });
+
+    await test('16c. material, waiting time, COD and pickup come from stored facts', async () => {
+      const c = phone(29);
+      await say(c, 'hi');
+      await say(c, 'spiderman');
+
+      contains(await say(c, 'material kya hai?'), 'cotton');
+      contains(await say(c, 'kitne din lagenge?'), '15');
+      contains(await say(c, 'cod hai kya?'), '2699'); // 2499 + 200
+      contains(await say(c, 'pickup kahan se hai?'), 'Dadar');
+      assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
+    });
+
+    await test('16d. waiting time is never volunteered', async () => {
+      const c = phone(30);
+      const first = await say(c, 'hi');
+      const second = await say(c, 'spiderman');
+      for (const reply of [first, second]) {
+        assert.ok(!/15.?20|20.?30/.test(reply), `wait time must only follow a question:\n${reply}`);
+      }
     });
 
     group('— details & order —');
 
+    await test('16e. the scanner goes out with the details prompt', async () => {
+      /**
+       * Where a customer is asked to pay is the one place the QR belongs:
+       * beside "order complete karne ke liye details bhej do", so they can
+       * scan while they type. It used to arrive only after the whole form
+       * was filled in and the order created - by which point the impatient
+       * half of customers had already asked where to send the money.
+       *
+       * Driven fresh rather than read off the shared customer, because
+       * say() clears the recording on every call and the prompt in question
+       * went out several turns ago.
+       */
+      const c = phone(41);
+      await say(c, 'hi');
+      await say(c, 'tshirt');
+      await say(c, 'spiderman');
+      await say(c, 'L');
+
+      assert.strictEqual(await stateOf(c), 'COLLECT_DETAILS');
+      assert.ok(
+        sent.some((m) => m.phone === c && m.type === 'media'),
+        'the details prompt must carry the scanner'
+      );
+      assert.ok(
+        !sent.some((m) => m.type === 'text' && m.text.includes('pay.example.com')),
+        'and never the typed link alongside it'
+      );
+    });
+
     await test('17. details collected, then the order summary', async () => {
-      contains(await say(CUSTOMER, '2'), 'details');
       assert.strictEqual(await stateOf(CUSTOMER), 'COLLECT_DETAILS');
       const reply = await say(
         CUSTOMER,
@@ -338,38 +494,60 @@ async function main() {
       );
       contains(reply, 'ORDER SUMMARY');
       contains(reply, 'Rahul Sharma');
-      contains(reply, '₹699 × 2');
-      contains(reply, '1398');
-      contains(reply, 'YES / NO');
+      contains(reply, '2499');
       assert.strictEqual(await stateOf(CUSTOMER), 'ORDER_SUMMARY');
     });
 
     await test('18. stock is NOT reduced before payment confirmation', async () => {
-      assert.strictEqual(await stockBySku('TS-BLK-L'), 3);
+      assert.strictEqual(await stockBySku('AES-TS-SPIDER-L'), 3);
     });
 
-    await test('19. YES creates a PENDING_PAYMENT order with the payment link', async () => {
+    await test('19. YES creates a booking, not a full-price order', async () => {
       const reply = await say(CUSTOMER, 'yes');
-      contains(reply, 'Total Amount');
-      contains(reply, 'pay.example.com');
+      contains(reply, '500'); // due now
+      contains(reply, '1999'); // due when it is ready
+      /**
+       * Where to pay is the SCANNER now, not a line of text.
+       *
+       * This used to assert the typed UPI id appeared in the message. It
+       * stopped being true the day the shop uploaded a QR, and that was
+       * the point: the two disagreed with each other, so only one of them
+       * is sent. The rule worth testing is that exactly one destination
+       * goes out - which is checked here and, for the no-scanner case, in
+       * the test below.
+       */
+      assert.ok(
+        !reply.includes('pay.example.com'),
+        `a typed link must not accompany the scanner:
+${reply}`
+      );
+      assert.ok(
+        !sent.some((m) => m.phone === CUSTOMER && m.type === 'media'),
+        'and the scanner must NOT be sent again here - they already have it, ' +
+          'and many customers have already paid from it by this point'
+      );
       contains(reply, 'screenshot');
 
       const order = await orderService.openFor(CUSTOMER);
       createdOrderIds.push(order.order_id);
       assert.strictEqual(order.status, 'PENDING_PAYMENT');
-      assert.strictEqual(Number(order.total), 1398);
+      assert.strictEqual(Number(order.total), 2499);
+      assert.strictEqual(Number(order.booking_amount), 500, 'booking amount stored on the order');
+      assert.strictEqual(Number(order.remaining_amount), 1999, 'remainder stored on the order');
+      assert.strictEqual(order.payment_mode, 'BOOKING');
+      assert.strictEqual(order.brand, 'AESTHURA');
       assert.strictEqual(orderService.paymentOf(order).status, 'PENDING');
-      assert.strictEqual(orderService.itemOf(order).quantity, 2);
+      assert.strictEqual(orderService.itemOf(order).quantity, 1, 'a booking is one piece');
       assert.strictEqual(await stateOf(CUSTOMER), 'WAITING_FOR_PAYMENT');
     });
 
     await test('20. order_items snapshot name, colour, size and price', async () => {
       const order = await orderService.openFor(CUSTOMER);
       const item = orderService.itemOf(order);
-      assert.strictEqual(item.product_name_snapshot, 'T-Shirt');
-      assert.strictEqual(item.color_snapshot, 'Black');
+      assert.strictEqual(item.product_name_snapshot, 'Spider-Man T-Shirt');
+      assert.strictEqual(item.color_snapshot, 'Red');
       assert.strictEqual(item.size_snapshot, 'L');
-      assert.strictEqual(Number(item.unit_price), 699);
+      assert.strictEqual(Number(item.unit_price), 2499);
       assert.ok(item.variant_id, 'variant should be linked');
     });
 
@@ -385,7 +563,7 @@ async function main() {
 
     await test('22. screenshot -> PAYMENT_VERIFYING + admin alert, NOT confirmed', async () => {
       const reply = await sendProof(CUSTOMER);
-      contains(reply, 'Payment proof mil gaya');
+      contains(reply, 'proof', 'customer gets an acknowledgement');
 
       const adminMessages = sent.filter((m) => m.phone === ADMIN);
       assert.ok(adminMessages.length > 0, 'admin must be notified');
@@ -399,10 +577,10 @@ async function main() {
       assert.ok(proof, 'proof_url recorded');
       assert.ok(require('fs').existsSync(path.join(config.ROOT, proof)), 'proof file on disk');
       assert.strictEqual(await stateOf(CUSTOMER), 'PAYMENT_VERIFYING');
-      assert.strictEqual(await stockBySku('TS-BLK-L'), 3, 'proof must not move stock');
+      assert.strictEqual(await stockBySku('AES-TS-SPIDER-L'), 3, 'proof must not move stock');
     });
 
-    await test('23. /paid confirms atomically: PAID + CONFIRMED + stock 3→1 + HUMAN', async () => {
+    await test('23. /paid confirms atomically: PAID + CONFIRMED + stock 3→2 + HUMAN', async () => {
       const order = await orderService.openFor(CUSTOMER);
       const reply = await say(ADMIN, `/paid ${order.order_id}`);
       contains(reply, 'CONFIRMED');
@@ -411,17 +589,17 @@ async function main() {
       assert.strictEqual(after.status, 'CONFIRMED');
       assert.strictEqual(orderService.paymentOf(after).status, 'VERIFIED');
       assert.strictEqual(orderService.paymentOf(after).verified_by, ADMIN);
-      assert.strictEqual(await stockBySku('TS-BLK-L'), 1, 'stock must drop by 2');
+      assert.strictEqual(await stockBySku('AES-TS-SPIDER-L'), 2, 'stock must drop by 1');
 
       const toCustomer = sent.find((m) => m.phone === CUSTOMER);
-      contains(toCustomer.text, 'confirm ho gaya');
-      contains(toCustomer.text, 'agent personally assist');
+      contains(toCustomer.text, 'confirmed');
+      contains(toCustomer.text, 'assist');
       assert.strictEqual(await modeOf(CUSTOMER), 'HUMAN');
     });
 
     await test('24. HUMAN mode: bot stays completely silent', async () => {
       assert.strictEqual(await say(CUSTOMER, 'bhai?'), '');
-      assert.strictEqual(await say(CUSTOMER, 'tshirt chahiye'), '');
+      assert.strictEqual(await say(CUSTOMER, 'spiderman chahiye'), '');
       assert.strictEqual(await say(CUSTOMER, 'start'), '');
     });
 
@@ -429,28 +607,28 @@ async function main() {
       const orderId = createdOrderIds[0];
       const reply = await say(ADMIN, `/paid ${orderId}`);
       contains(reply, 'pehle se CONFIRMED');
-      assert.strictEqual(await stockBySku('TS-BLK-L'), 1, 'stock must not move again');
+      assert.strictEqual(await stockBySku('AES-TS-SPIDER-L'), 2, 'stock must not move again');
     });
 
     await test('26. /resume puts the customer back on the bot', async () => {
       contains(await say(ADMIN, `/resume ${CUSTOMER}`), 'BOT mode');
       assert.strictEqual(await modeOf(CUSTOMER), 'BOT');
-      contains(await say(CUSTOMER, 'menu'), 'Welcome');
+      contains(await say(CUSTOMER, 'menu'), 'T-Shirts');
     });
 
     await test('27. /human takes a customer off the bot', async () => {
       const c = phone(18);
       await say(c, 'hi');
       contains(await say(ADMIN, `/human ${c}`), 'HUMAN mode');
-      assert.strictEqual(await say(c, 'tshirt'), '');
+      assert.strictEqual(await say(c, 'spiderman'), '');
       assert.strictEqual(await modeOf(c), 'HUMAN');
     });
 
     await test('28. /reject fails payment, keeps stock, switches to HUMAN', async () => {
       const c = phone(19);
       await say(c, 'hi');
-      await say(c, 'bag');
-      await say(c, '1');
+      await say(c, 'bape single hood');
+      await say(c, 'L');
       await say(c, 'Name: Vikas\nAddress: 9 Lake Road\nCity: Pune\nState: Maharashtra\nPIN: 411001');
       await say(c, 'yes');
       const order = await orderService.openFor(c);
@@ -472,8 +650,8 @@ async function main() {
     await test('29. existing customer is asked before the saved address is reused', async () => {
       await say(ADMIN, `/resume ${CUSTOMER}`);
       await say(CUSTOMER, 'menu');
-      await say(CUSTOMER, 'bag');
-      const asked = await say(CUSTOMER, '1');
+      await say(CUSTOMER, 'bape single hood');
+      const asked = await say(CUSTOMER, 'L');
       contains(asked, 'purani details');
       contains(asked, 'Rahul Sharma');
       contains(asked, 'YES - same address');
@@ -487,7 +665,7 @@ async function main() {
     await test('30. duplicate message id is ignored', async () => {
       const c = phone(20);
       const id = `dup_${Date.now().toString(36)}`;
-      contains(await say(c, 'hello', { id }), 'Welcome');
+      contains(await say(c, 'hello', { id }), 'T-Shirts');
       assert.strictEqual(await say(c, 'hello', { id }), '', 'duplicate must not reply twice');
     });
 
@@ -496,14 +674,14 @@ async function main() {
       await say(c, 'hi');
       contains(await say(c, 'bhai mujhe owner se baat karni hai'), 'agent personally assist');
       assert.strictEqual(await modeOf(c), 'HUMAN');
-      assert.strictEqual(await say(c, 'tshirt chahiye'), '');
+      assert.strictEqual(await say(c, 'spiderman chahiye'), '');
     });
 
     await test('32. cancel closes the pending order', async () => {
       const c = phone(22);
       await say(c, 'hi');
-      await say(c, 'bag');
-      await say(c, '1');
+      await say(c, 'bape single hood');
+      await say(c, 'L');
       await say(c, 'Name: Sunil\nAddress: 5 Park Street\nCity: Kolkata\nState: West Bengal\nPIN: 700016');
       await say(c, 'yes');
       const order = await orderService.openFor(c);
@@ -519,11 +697,13 @@ async function main() {
       const b = phone(24);
       await say(a, 'hi');
       await say(b, 'hi');
-      await say(a, 'tshirt');
-      await say(b, 'bag');
-      await say(a, 'black');
-      assert.strictEqual(await stateOf(a), 'SELECT_SIZE');
-      assert.strictEqual(await stateOf(b), 'SELECT_QUANTITY');
+      await say(a, 'spiderman');
+      await say(b, 'bape single hood');
+      assert.strictEqual(await stateOf(a), 'SELECT_SIZE', 'a is picking a size');
+      assert.strictEqual(await stateOf(b), 'SELECT_SIZE', 'b is on its own hoodie');
+      await say(a, 'L');
+      assert.strictEqual(await stateOf(a), 'COLLECT_DETAILS');
+      assert.strictEqual(await stateOf(b), 'SELECT_SIZE', 'b must not move when a does');
     });
 
     await test('34. order ids are unique and sequential', async () => {
@@ -541,7 +721,7 @@ async function main() {
         throw new Error('boom: secret internal detail');
       };
       try {
-        await say(c, 'tshirt');
+        await say(c, 'spiderman');
       } finally {
         productService.activeProducts = original;
       }
@@ -568,7 +748,7 @@ async function main() {
         .from('messages').select('id, text').eq('phone', c).eq('direction', 'OUTGOING');
       assert.ok(incoming.length > 0, 'incoming messages stored');
       assert.ok(outgoing.length > 0, 'outgoing messages stored');
-      contains(outgoing[0].text, 'Welcome', 'stored outgoing text');
+      contains(outgoing.map((m) => m.text).join('\n'), 'T-Shirts', 'stored outgoing text');
     });
 
     await test('37. /orders, /order, /stock, /product, /help work', async () => {
@@ -589,7 +769,7 @@ async function main() {
       const c = phone(26);
       await adapter.simulateIncomingMessage(c, 'hi');
       assert.ok(outbox.length > 0, 'simulated message should produce a reply');
-      contains(outbox.map((m) => m.text).join('\n'), 'Welcome');
+      contains(outbox.map((m) => m.text).join('\n'), 'T-Shirts');
     });
   } finally {
     // --- restore everything -------------------------------------------------

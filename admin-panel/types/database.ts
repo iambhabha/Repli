@@ -89,9 +89,27 @@ export interface ProductRow {
   id: string;
   code: string;
   name: string;
+  /** What the customer picks by ("Spider-Man"); falls back to `name`. */
+  design: string | null;
   description: string | null;
   emoji: string | null;
   price: number;
+  /** Paid now to reserve a size; 0 means the full price is due up front. */
+  booking_amount: number;
+  brand: string;
+  /** Matches `product_categories.key`. */
+  category: string;
+  /** No stock held - every size is subject to confirmation. */
+  made_to_order: boolean;
+  cod_available: boolean;
+  cod_charge: number;
+  /** Extra spellings customers use; the bot matches on these. */
+  keywords: string[] | null;
+  /**
+   * `storage:bucket/key` in the shop's private bucket, or a path under the
+   * bot's root. Never a URL - the bot refuses those on purpose.
+   */
+  image_path: string | null;
   active: boolean;
   sort_order: number;
   created_at: string;
@@ -105,6 +123,8 @@ export interface ProductVariantRow {
   size: string | null;
   sku: string | null;
   stock_quantity: number;
+  /** This colour's own photo. Takes precedence over the product's. */
+  image_path: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -148,6 +168,7 @@ export interface PaymentRow {
   amount: number;
   status: PaymentStatus;
   proof_url: string | null;
+  proof_object: string | null;
   verified_by: string | null;
   verified_at: string | null;
   created_at: string;

@@ -11,28 +11,23 @@
  */
 
 const { supabase, unwrap } = require('../db/supabase');
+const cache = require('../db/cache');
 const config = require('../config');
 const logger = require('../logger');
 
-const TTL_MS = 10000;
-
-let cache = null;
-let cacheAt = 0;
-
-function invalidate() {
-  cache = null;
-  cacheAt = 0;
+/** Memory is cleared synchronously inside cache.del(), before any await. */
+async function invalidate() {
+  await cache.del(cache.KEYS.bypass);
 }
 
 async function load() {
-  if (cache && Date.now() - cacheAt < TTL_MS) return cache;
-  const rows = unwrap(
-    await supabase.from('bypass_numbers').select('*').eq('active', true),
-    'bypass.load'
-  );
-  cache = rows || [];
-  cacheAt = Date.now();
-  return cache;
+  return cache.remember(cache.KEYS.bypass, config.BYPASS_TTL_MS, async () => {
+    const rows = unwrap(
+      await supabase.from('bypass_numbers').select('*').eq('active', true),
+      'bypass.load'
+    );
+    return rows || [];
+  });
 }
 
 /** Fails closed: if the lookup errors we treat the number as bypassed. */
@@ -81,7 +76,7 @@ async function add(phone, name) {
     );
   }
 
-  invalidate();
+  await invalidate();
   logger.info('bypass.added', { phone: key, action: name || '' });
   return { ok: true, phone: key, name: name || null };
 }
@@ -99,7 +94,7 @@ async function remove(phone) {
     await supabase.from('bypass_numbers').update({ active: false }).eq('id', existing.id),
     'bypass.remove'
   );
-  invalidate();
+  await invalidate();
   logger.info('bypass.removed', { phone: key });
   return { ok: true, phone: key };
 }

@@ -14,6 +14,7 @@ import {
   Settings,
   ShoppingBag,
   Users,
+  Shapes,
 } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useMemo } from 'react';
@@ -126,6 +127,7 @@ export function Sidebar({
           ],
         },
         { id: 'products', title: 'Products', icon: Package, href: '/admin/products' },
+        { id: 'categories', title: 'Categories', icon: Shapes, href: '/admin/categories' },
         {
           id: 'stock',
           title: 'Stock',
