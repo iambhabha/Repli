@@ -147,19 +147,43 @@ module.exports = function wwebjsDriver() {
       pushName: String(message._data?.notifyName || '').trim(),
     };
 
-    // Status updates and group media are thrown away by the router anyway -
-    // downloading them first only wasted bandwidth and logged noisy errors.
+    /**
+     * Status updates and group media are thrown away by the router anyway -
+     * downloading them first only wasted bandwidth and logged noisy errors.
+     *
+     * One attempt, and one quick retry.
+     *
+     * It was three, spread over more than two seconds, on the theory that
+     * WhatsApp needed a moment to have the picture ready. The theory was
+     * wrong: across dozens of images not one second or third attempt ever
+     * succeeded, so the waiting bought nothing - and when forty-six photos
+     * arrived at once it turned into two minutes of the shop doing nothing
+     * but waiting to fail.
+     *
+     * The quick retry stays because it is nearly free. The failure itself is
+     * still unexplained ("r", from minified code inside the library) and is
+     * worth chasing separately; the caller is written to cope with no
+     * picture, so the shop answers either way.
+     */
     if (isMedia && !isGroup && !isStatus) {
-      try {
-        const downloaded = await message.downloadMedia();
-        if (downloaded?.data) {
-          normalised.media = {
-            buffer: Buffer.from(downloaded.data, 'base64'),
-            mimetype: downloaded.mimetype || mimetype || 'image/jpeg',
-          };
+      const waits = [0, 300];
+      for (let attempt = 0; attempt < waits.length; attempt += 1) {
+        if (waits[attempt]) await new Promise((done) => setTimeout(done, waits[attempt]));
+        try {
+          const downloaded = await message.downloadMedia();
+          if (downloaded?.data) {
+            normalised.media = {
+              buffer: Buffer.from(downloaded.data, 'base64'),
+              mimetype: downloaded.mimetype || mimetype || 'image/jpeg',
+            };
+            if (attempt > 0) logger.info('whatsapp.media_retried', { action: `attempt ${attempt + 1}` });
+            break;
+          }
+        } catch (err) {
+          if (attempt === waits.length - 1) {
+            logger.error('whatsapp.media_failed', { error: err.message, action: `${waits.length} attempts` });
+          }
         }
-      } catch (err) {
-        logger.error('whatsapp.media_failed', { error: err.message });
       }
     }
 

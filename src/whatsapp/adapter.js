@@ -166,6 +166,34 @@ function wrap(driver) {
       const to = config.normalisePhone(phone);
       if (!to || !text) return;
 
+      /**
+       * The same sentence twice in a row, to the same person, is never right.
+       *
+       * A customer sent forty-six photographs in one go. The shop had no
+       * open order, so each one was answered - and forty-six identical
+       * "Bhai abhi koi pending order nahi hai" went out, one per image, in
+       * under a minute. Nothing was broken: every reply was individually
+       * correct, and the shop still looked like a machine having a fit.
+       *
+       * This is the last line before the wire, so it catches that whatever
+       * upstream reason produced it - a burst of media, a customer tapping
+       * send repeatedly, a retry loop nobody has found yet. The first reply
+       * always goes; the repeats are dropped and counted.
+       *
+       * Sixty seconds, and only for an EXACTLY identical message. Anything
+       * the shop genuinely needs to say twice - a size question after a
+       * detour, a summary shown again - differs by at least a word, and a
+       * minute later the same words are a reminder rather than a stutter.
+       */
+      if (!options.raw) {
+        const last = recentlySent.get(to);
+        if (last && last.body === String(text) && Date.now() - last.at < REPEAT_WINDOW) {
+          last.dropped += 1;
+          logger.info('reply.repeat_suppressed', { phone: to, action: `${last.dropped} dropped` });
+          return;
+        }
+      }
+
       // The AI only ever rephrases what is already decided, and only for
       // customers: an admin reading "/paid REP-1039 done" wants the exact
       // words, not a friendlier version of them.
@@ -192,6 +220,7 @@ function wrap(driver) {
 
       try {
         await driver.sendMessage(to, body);
+        recentlySent.set(to, { body: String(text), at: Date.now(), dropped: 0 });
         logger.info('reply.sent', { phone: to, reply: body });
 
         /**
@@ -299,6 +328,26 @@ const DRIVERS = {
   wwebjs: () => require('./wwebjs')(),
   openwa: () => require('./openwa')(),
 };
+
+/**
+ * The last thing said to each number, so it is not said again immediately.
+ *
+ * In memory on purpose: it is a stutter guard, not a record. A restart
+ * losing it costs one duplicate message at worst, and the alternative - a
+ * round trip to the database before every reply - would put a query in front
+ * of every single thing the shop says.
+ *
+ * Trimmed when it grows, so a busy day cannot turn it into a leak.
+ */
+const REPEAT_WINDOW = 60_000;
+const recentlySent = new Map();
+
+setInterval(() => {
+  const cutoff = Date.now() - REPEAT_WINDOW;
+  for (const [phone, entry] of recentlySent) {
+    if (entry.at < cutoff) recentlySent.delete(phone);
+  }
+}, REPEAT_WINDOW).unref();
 
 function createAdapter(driverName = config.DRIVER) {
   const factory = DRIVERS[driverName] || DRIVERS.wwebjs;

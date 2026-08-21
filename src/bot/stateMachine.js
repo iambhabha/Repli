@@ -30,6 +30,25 @@ const customerService = require('../services/customerService');
 const productService = require('../services/productService');
 const orderService = require('../services/orderService');
 const paymentService = require('../services/paymentService');
+const path = require('path');
+/**
+ * The same threshold the colour message uses.
+ *
+ * Imported rather than repeated: the question "is this sold off a card?" is
+ * answered in one place, so the message asking for a tick and the code that
+ * accepts the tick can never disagree about which products those are.
+ */
+const { CHART_THRESHOLD: CHART_COLOURS } = require('./pack');
+
+/**
+ * What the order says when the colour was ticked on a picture.
+ *
+ * Deliberately a sentence rather than a colour name. Nothing on this side
+ * read the mark, so anything that looked like a colour here would be an
+ * invention - and it would be the invention printed on the order and read by
+ * whoever packs it. This sends them back to the photograph instead.
+ */
+const MARKED_ON_CHART = 'Marked on chart';
 
 const { MODE, STATES } = conversationService;
 const DETAIL_FIELDS = customerService.DETAIL_FIELDS;
@@ -216,10 +235,39 @@ async function sendWelcome(bot, phone, category = null) {
    * as the shop's own card it is a shop window. Sent before the list so the
    * customer sees what they are choosing from first.
    */
-  if (category) {
+  /**
+   * The department's own card, when there is a list to introduce.
+   *
+   * Skipped when the department holds one product, because that product is
+   * about to send its own picture - and two photographs arriving back to
+   * back, the second answering the first, is the shop talking over itself.
+   */
+  if (category && products.length > 1) {
     const row = await categoryService.getByKey(category).catch(() => null);
     const picture = row ? await categoryService.resolveImage(row) : null;
     if (picture) await bot.sendImage(phone, picture, '');
+  }
+
+  /**
+   * A department with one thing in it is not a choice.
+   *
+   * Asked for bags, the shop replied "Sure! We currently have: Nike Elite
+   * Backpack. Which one do you prefer?" - a list of one, and a question with
+   * a single possible answer. The customer has to send another message to
+   * say the only thing there is to say.
+   *
+   * So the one product is simply taken, and the conversation moves to the
+   * question that actually has answers in it: which colour. This is the same
+   * rule afterProductSelected already applies one level down, where a design
+   * with a single colour never gets asked about.
+   *
+   * Only when a category was named. Somebody who has not chosen a department
+   * is browsing, and the whole catalogue is the reply even if it were to
+   * hold one item.
+   */
+  if (category && products.length === 1) {
+    logger.info('catalogue.only_one', { phone, action: `${category}: ${products[0].design || products[0].name}` });
+    return afterProductSelected(bot, phone, products[0]);
   }
 
   await bot.sendMessage(phone, bot.t.welcome(withColour));
@@ -921,7 +969,13 @@ async function afterProductSelected(bot, phone, product, extra = {}) {
   const chart = (await productService.imagesFor(product).catch(() => []))[0] || null;
   if (chart) await bot.sendImage(phone, chart, '');
 
-  await bot.sendMessage(phone, bot.t.chooseColor(product, colors));
+  /**
+   * Raw for the same reason as chartReceived: the instruction IS the
+   * message. The rewriter kept collapsing "mark the bag and send it back /
+   * which one would you like?" into one of the two, and a customer told to
+   * mark a picture without being told what for is a customer who does not.
+   */
+  await bot.sendMessage(phone, bot.t.chooseColor(product, colors), { raw: true });
   await conversationService.save(
     phone,
     conversationService.clearedCart({
@@ -1540,6 +1594,105 @@ async function applySize(bot, phone, convo, product, size) {
   return goToDetails(bot, phone, { ...updated, data: updated.data || {} });
 }
 
+/**
+ * True when the shop is waiting for a chart with a colour marked on it.
+ *
+ * Only where the colours were offered as a card rather than as a list - the
+ * same threshold the message itself uses. A design with three colours was
+ * asked about in words, so a photograph arriving in reply to that is not an
+ * answer to anything.
+ */
+async function awaitingMarkedChart(convo) {
+  if (convo.state !== STATES.SELECT_COLOR || !convo.selected_product_id) return false;
+  const product = await productService.getById(convo.selected_product_id).catch(() => null);
+  if (!product) return false;
+  const colours = await productService.colorsOf(product).catch(() => []);
+  return colours.length > CHART_COLOURS;
+}
+
+/**
+ * Take the marked chart, put it in front of a person, and carry on selling.
+ *
+ * The picture is forwarded when we have it. It often will not be: WhatsApp's
+ * media download fails on a fair share of incoming images, so the admin is
+ * told either way and pointed at the chat when the file did not arrive. The
+ * customer gets the same answer regardless.
+ *
+ * The order does NOT stop here. Handing the conversation to a person while
+ * the colour is checked would put the shop's own admin ahead of the sale -
+ * the customer sits waiting, and the address, the quantity and the advance
+ * all wait with them. The confirmation happens in the background; the
+ * conversation goes to the next question exactly as it would have if they
+ * had typed a colour name.
+ *
+ * The colour is recorded as marked-on-chart rather than guessed at. Nothing
+ * here read the tick, and the order has to say what is actually known -
+ * "Marked on chart" sends whoever packs it back to the picture, which is the
+ * only place the answer exists.
+ */
+async function handleMarkedChart(bot, phone, convo, msg) {
+  const product = await productService.getById(convo.selected_product_id).catch(() => null);
+  const item = product ? product.design || product.name : 'a bag';
+
+  let file = null;
+  if (msg.media && msg.media.buffer) {
+    try {
+      file = paymentService.saveProofFile(`chart-${phone}`, msg.media.buffer, msg.media.mimetype);
+    } catch (err) {
+      logger.warn('chart.save_failed', { phone, error: err.message });
+    }
+  }
+
+  const note =
+    `🎨 COLOUR MARKED
+
+Customer: ${phone}
+Item: ${item}
+
+` +
+    (file
+      ? 'Unhone chart par apna colour tick karke bheja hai. Confirm karke unhe bata dijiye.'
+      : 'Unhone chart par tick karke bheja hai, par image download nahi hui - WhatsApp chat me dekh lijiye.') +
+    `
+
+Order chalu hai - bot aage badh gaya hai.`;
+
+  if (file) await bot.notifyAdminsImage(path.join(config.ROOT, file), note, phone).catch(() => {});
+  else await bot.notifyAdmins(note).catch(() => {});
+
+  /**
+   * Straight to quantity, the same step a named colour would have reached.
+   *
+   * No variant is set, because there is no variant to set - which the order
+   * allows: variantId is nullable and the bag is made to order, so nothing
+   * downstream needs a row that names this colour.
+   */
+  await conversationService.save(phone, {
+    state: STATES.SELECT_QUANTITY,
+    selected_product_id: convo.selected_product_id,
+    selected_variant_id: null,
+    quantity: null,
+    data: { ...convo.data, color: MARKED_ON_CHART, size: null },
+  });
+
+  /**
+   * Sent raw, because the last line of it is the next question.
+   *
+   * The rewriter is allowed to reword a template and normally that is fine.
+   * Here it read "your colour is noted - how many would you like?" and sent
+   * back only the first half. The customer was moved to the quantity step
+   * and never asked the quantity: a dead end, in a message that looked
+   * perfectly polite.
+   *
+   * Anything whose operative sentence is a question the flow depends on goes
+   * out exactly as written.
+   */
+  if (product) await bot.sendMessage(phone, bot.t.chartReceived(product), { raw: true });
+
+  logger.info('chart.received', { phone, action: `${item}${file ? '' : ' (no image)'}` });
+  return 'chart_marked';
+}
+
 /** A photo/PDF can only mean one thing here: payment proof. */
 async function handleMedia(bot, phone, convo, msg) {
   const order = await orderService.openFor(phone);
@@ -1780,6 +1933,43 @@ async function handleMessage(bot, msg) {
       convo.state === STATES.WAITING_FOR_PAYMENT || convo.state === STATES.PAYMENT_VERIFYING;
 
     if (expectingPayment) return handleMedia(bot, phone, convo, msg);
+
+    /**
+     * The marked chart coming back.
+     *
+     * The shop asks a bag customer to tick their colour on the card and send
+     * the picture, and every one of those pictures used to be answered with
+     * "place an order first" - the last step of the shop's own flow rejected
+     * by the step before it. The conversation then dropped to START and the
+     * customer had to begin again.
+     *
+     * Nothing here tries to read the tick. A mark on a photograph is not
+     * something to guess at, and the colour has to be confirmed with the
+     * supplier by a person regardless - so the picture goes to a person,
+     * which is where it was always headed.
+     */
+    if (await awaitingMarkedChart(convo)) {
+      return handleMarkedChart(bot, phone, convo, msg);
+    }
+
+    /**
+     * Paid already, address not yet given.
+     *
+     * The scanner goes out alongside the details form, so a customer who is
+     * ready simply pays and sends the proof before typing anything - and got
+     * told "you don't have a pending order right now", moments after paying.
+     * True, and the worst possible thing to say: the order does not exist
+     * yet because it is created from the summary, which they have not
+     * reached because the address is missing.
+     *
+     * Nothing here touches the money. The screenshot is acknowledged, not
+     * accepted, and the form is put back in front of them so the order can
+     * be made and the payment checked properly.
+     */
+    if (collectingDetails) {
+      await bot.sendMessage(phone, bot.t.paidBeforeDetails(), { raw: true });
+      return 'media_before_details';
+    }
 
     await bot.sendMessage(phone, bot.t.needOrderFirst());
     return 'media_without_pending_payment';

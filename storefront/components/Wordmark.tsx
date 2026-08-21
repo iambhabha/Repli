@@ -49,10 +49,15 @@ export function Wordmark({
   /**
    * Whether the letters answer the pointer.
    *
-   * Off by default, because in the bar the mark is a link and the whole of
-   * it should behave as one thing. At the foot of the page it is large, it
-   * is not a link, and lighting a single letter under the cursor is the one
-   * bit of play the page allows itself.
+   * Off by default so a mark can be dropped anywhere without bringing an
+   * interaction with it. Both marks on this site turn it on: the one at the
+   * foot because it is large and there is nothing else down there, and the
+   * one in the bar because the same gesture should do the same thing in both
+   * places - a letter that lights under the cursor at the bottom of the page
+   * and sits inert at the top reads as one of them being broken.
+   *
+   * It costs the link nothing. The glow is read per letter and the anchor
+   * still takes the whole mark, so the click target is unchanged.
    */
   respond?: boolean;
 }) {

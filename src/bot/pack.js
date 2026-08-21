@@ -14,6 +14,16 @@ const templates = require('./templates');
 
 const NUM_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
+/**
+ * Past this many colours, the printed card is a better interface than a list.
+ *
+ * The numbered list runs out of emoji at ten and runs out of screen well
+ * before that. The bag has twenty-four, and the card carrying all of them is
+ * already on the customer's screen - so above this threshold the shop asks
+ * them to mark the card rather than reciting the names at them.
+ */
+const CHART_THRESHOLD = 8;
+
 const money = (amount) => `${config.CURRENCY}${Math.round(Number(amount || 0))}`;
 
 const numberedList = (items) =>
@@ -158,10 +168,22 @@ function createPack(language) {
         total: money(Number(product.price || 0) + Number(product.cod_charge || 0)),
       }),
 
+    /**
+     * How many colours can be read as a list before it stops being one.
+     *
+     * Past this the names are a wall of text and the printed card is the
+     * better interface - see chooseColorOnChart. Eight is roughly where a
+     * numbered list stops fitting on a phone without scrolling.
+     */
     chooseColor: (product, colors) =>
-      t('chooseColor', { emoji: product.emoji || '', colors: numberedList(colors) }),
+      colors.length > CHART_THRESHOLD
+        ? t('chooseColorOnChart', { emoji: product.emoji || '' })
+        : t('chooseColor', { emoji: product.emoji || '', colors: numberedList(colors) }),
 
-    colorNotUnderstood: (colors) => t('colorNotUnderstood', { colors: numberedList(colors) }),
+    colorNotUnderstood: (colors) =>
+      colors.length > CHART_THRESHOLD
+        ? t('colorNotUnderstoodOnChart', {})
+        : t('colorNotUnderstood', { colors: numberedList(colors) }),
 
     chooseSize: (sizes) => t('chooseSize', { sizes: sizes.join('\n') }),
 
@@ -339,6 +361,16 @@ function createPack(language) {
 
     technicalError: () => t('technicalError', {}),
 
+    paidBeforeDetails: () => t('paidBeforeDetails', {}),
+
+    chartReceived: (product) =>
+      t('chartReceived', {
+        item: product.design || product.name,
+        price: money(product.price),
+        booking: money(product.booking_amount),
+        remaining: money(Number(product.price || 0) - Number(product.booking_amount || 0)),
+      }),
+
     needOrderFirst: () => t('needOrderFirst', {}),
 
     money,
@@ -346,4 +378,4 @@ function createPack(language) {
   };
 }
 
-module.exports = { createPack, money, describe, numberedList, pieces, itemOf };
+module.exports = { createPack, money, describe, numberedList, pieces, itemOf, CHART_THRESHOLD };

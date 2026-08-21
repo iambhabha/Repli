@@ -129,6 +129,103 @@ Which colour would you like?
 {{colors}}`,
   },
   {
+    key: 'chooseColorOnChart',
+    category: 'product',
+    label: 'Ask for colour, off the printed chart',
+    /**
+     * Used where the colours are sold off a card rather than listed.
+     *
+     * The bag comes in twenty-four, and printing twenty-four names into a
+     * chat is not a choice anybody can make - it is a wall the customer has
+     * to read before they can answer. The card is already on their screen,
+     * every colour on it named and priced, so the card is the interface:
+     * they mark the one they want and send it back.
+     *
+     * Asking for a tick rather than a name is also what the shop actually
+     * does. It keeps no count of colours; a person confirms availability
+     * with the supplier afterwards, and a marked picture is the least
+     * ambiguous way of saying which one was meant.
+     *
+     * One route is offered, not two. Naming a colour still works - the flow
+     * reads a typed name exactly as it did before - but the message does not
+     * mention it, because a customer given two ways to answer stops to pick
+     * between them, and half the names on this card ("Black & White",
+     * "Original Dark Blue") are ones people get slightly wrong when typing.
+     * A tick cannot be typed slightly wrong.
+     */
+    description:
+      'Too many colours to list. The customer marks the chart and sends it back.',
+    placeholders: ['emoji'],
+    hi: `Perfect bhai {{emoji}}🔥
+
+Jo image bheji hai usme aapko jo bag chahiye, us par tick kar ke wapas bhej do 👆
+
+Konsa bag chahiye aapko?`,
+    en: `Great choice {{emoji}}🔥
+
+On the picture I sent, mark the bag you want and send it back 👆
+
+Which one would you like?`,
+  },
+  {
+    key: 'chartReceived',
+    category: 'product',
+    label: 'Marked chart received',
+    /**
+     * Says what happened and nothing more.
+     *
+     * It does not name a colour, because nothing on this side read the tick;
+     * it does not say the colour is available, because the shop keeps no
+     * count and finds out from its supplier. What it can honestly say is
+     * that the picture arrived and somebody will confirm it.
+     *
+     * And then it prices the thing and asks the next question, in the same
+     * shape and the same order as the message a T-shirt customer gets:
+     * total, what reserves it, what is left. A bag buyer should not be
+     * walked through a different-looking sale to everyone else.
+     *
+     * Stopping to confirm the colour first would be the shop putting its own
+     * admin ahead of the customer: that confirmation happens in the
+     * background either way, so the quantity, the address and the advance
+     * can all be taken while it does.
+     */
+    description:
+      'They marked the chart and sent it back. Acknowledge, price it, ask how many.',
+    placeholders: ['item', 'price', 'booking', 'remaining'],
+    hi: `Mil gayi bhai 👍 Colour note kar liya - team confirm karke bata degi.
+
+{{item}} — done ✅
+
+{{price}} total
+{{booking}} abhi, reserve karne ke liye
+{{remaining}} baad me, jab piece ready ho jaye
+
+Kitne chahiye?`,
+    en: `Got it 👍 Your colour is noted - we'll confirm it and let you know.
+
+{{item}} — done ✅
+
+{{price}} total
+{{booking}} now, to reserve it
+{{remaining}} once the piece is ready
+
+How many would you like?`,
+  },
+  {
+    key: 'colorNotUnderstoodOnChart',
+    category: 'product',
+    label: 'Colour not understood, off the printed chart',
+    description:
+      'Their reply matched no colour, and there are too many to list back at them.',
+    placeholders: [],
+    hi: `Bhai samajh nahi aaya 😅
+
+Jo image bheji hai usme us bag par tick kar ke photo wapas bhej do 👆`,
+    en: `Sorry, I didn't catch that 😅
+
+On the picture I sent, mark the bag you want and send it back 👆`,
+  },
+  {
     key: 'colorNotUnderstood',
     category: 'product',
     label: 'Colour not understood',
@@ -335,6 +432,46 @@ City:
 State:
 PIN Code:`,
     en: `To complete your order, please send:
+
+Name:
+Full Address:
+City:
+State:
+PIN Code:`,
+  },
+  {
+    key: 'paidBeforeDetails',
+    category: 'details',
+    /**
+     * The screenshot that arrives too early.
+     *
+     * The scanner goes out WITH this form, so a customer who is ready to buy
+     * pays first and sends the proof before typing an address - which is the
+     * sensible order from where they are sitting. The shop used to answer
+     * that with "you don't have a pending order right now", which is true
+     * and useless: they had just paid, and were being told nothing existed.
+     *
+     * There is genuinely no order yet - it is created once the summary is
+     * agreed - so this must not confirm anything about the money. It says
+     * the picture arrived, says what is still missing, and repeats the form
+     * so they do not have to scroll for it.
+     */
+    label: 'Screenshot arrived before the address',
+    description:
+      'They paid from the scanner sent with the form. Acknowledge, do not confirm, and ask for the address again.',
+    placeholders: [],
+    hi: `Screenshot mil gaya bhai 👍
+
+Bas address reh gaya hai - wo bhej do, phir order confirm karke payment check kar lenge:
+
+Name:
+Full Address:
+City:
+State:
+PIN Code:`,
+    en: `Got your screenshot 👍
+
+Just the address left - send it and we'll confirm the order and check the payment:
 
 Name:
 Full Address:

@@ -525,6 +525,10 @@
     margin-block: var(--spacing);
   }
 
+  .-mt-20 {
+    margin-top: calc(var(--spacing) * -20);
+  }
+
   .mt-1 {
     margin-top: var(--spacing);
   }
@@ -727,6 +731,10 @@
 
   .h-24 {
     height: calc(var(--spacing) * 24);
+  }
+
+  .h-\[1\.6rem\] {
+    height: 1.6rem;
   }
 
   .h-\[1\.15rem\] {
@@ -977,6 +985,10 @@
     gap: calc(var(--spacing) * 2);
   }
 
+  .gap-2\.5 {
+    gap: calc(var(--spacing) * 2.5);
+  }
+
   .gap-3 {
     gap: calc(var(--spacing) * 3);
   }
@@ -1082,6 +1094,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
+  }
+
+  .overflow-clip {
+    overflow: clip;
   }
 
   .overflow-hidden {
@@ -1487,6 +1503,10 @@
 
   .pt-16 {
     padding-top: calc(var(--spacing) * 16);
+  }
+
+  .pt-20 {
+    padding-top: calc(var(--spacing) * 20);
   }
 
   .pr-2 {
@@ -1984,6 +2004,10 @@
     clip-path: inset(-100vh -100vw 0);
   }
 
+  .\[overflow-clip-margin\:6rem\] {
+    overflow-clip-margin: 6rem;
+  }
+
   :where(.divide-x-reverse > :not(:last-child)) {
     --tw-divide-x-reverse: 1;
   }
@@ -2196,6 +2220,10 @@
       height: calc(var(--spacing) * 6);
     }
 
+    .sm\:h-8 {
+      height: calc(var(--spacing) * 8);
+    }
+
     .sm\:grid-cols-2 {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -2206,6 +2234,10 @@
 
     .sm\:grid-cols-\[7rem_1fr_1\.6fr\] {
       grid-template-columns: 7rem 1fr 1.6fr;
+    }
+
+    .sm\:gap-3 {
+      gap: calc(var(--spacing) * 3);
     }
 
     .sm\:gap-8 {

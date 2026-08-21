@@ -404,10 +404,11 @@ function Nav() {
                     className: "shrink-0",
                     "aria-label": "AESTURA, back to the shop",
                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$components$2f$Wordmark$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["Wordmark"], {
-                        className: "h-[1.15rem] w-auto sm:h-6"
+                        respond: true,
+                        className: "h-[1.15rem] w-auto overflow-visible sm:h-6"
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Sections.tsx",
-                        lineNumber: 60,
+                        lineNumber: 69,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
@@ -440,12 +441,12 @@ function Nav() {
                             children: text
                         }, href, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 70,
+                            lineNumber: 79,
                             columnNumber: 13
                         }, this))
                 }, void 0, false, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 63,
+                    lineNumber: 72,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
@@ -454,7 +455,7 @@ function Nav() {
                     children: "WhatsApp"
                 }, void 0, false, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 80,
+                    lineNumber: 89,
                     columnNumber: 9
                 }, this)
             ]
@@ -484,7 +485,7 @@ function Hero() {
                             children: "Dadar, Mumbai"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 103,
+                            lineNumber: 112,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -492,7 +493,7 @@ function Hero() {
                             "aria-hidden": true
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 104,
+                            lineNumber: 113,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -500,7 +501,7 @@ function Hero() {
                             children: "Ships pan India"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 105,
+                            lineNumber: 114,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -508,13 +509,13 @@ function Hero() {
                             children: "Booked on WhatsApp"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 106,
+                            lineNumber: 115,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 102,
+                    lineNumber: 111,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("h1", {
@@ -525,7 +526,7 @@ function Hero() {
                             children: "Aesthura"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 110,
+                            lineNumber: 119,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -533,13 +534,13 @@ function Hero() {
                             children: "3Pointer.club"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 111,
+                            lineNumber: 120,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 109,
+                    lineNumber: 118,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -564,7 +565,7 @@ function Hero() {
                                     children: head
                                 }, void 0, false, {
                                     fileName: "[project]/storefront/components/Sections.tsx",
-                                    lineNumber: 121,
+                                    lineNumber: 130,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -572,18 +573,18 @@ function Hero() {
                                     children: body
                                 }, void 0, false, {
                                     fileName: "[project]/storefront/components/Sections.tsx",
-                                    lineNumber: 122,
+                                    lineNumber: 131,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, head, true, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 120,
+                            lineNumber: 129,
                             columnNumber: 13
                         }, this))
                 }, void 0, false, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 114,
+                    lineNumber: 123,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
@@ -592,18 +593,18 @@ function Hero() {
                     children: "Start on WhatsApp →"
                 }, void 0, false, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 127,
+                    lineNumber: 136,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/storefront/components/Sections.tsx",
-            lineNumber: 101,
+            lineNumber: 110,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/storefront/components/Sections.tsx",
-        lineNumber: 100,
+        lineNumber: 109,
         columnNumber: 5
     }, this);
 }
@@ -633,23 +634,23 @@ function Ticker() {
                             children: "◆"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 162,
+                            lineNumber: 171,
                             columnNumber: 13
                         }, this)
                     ]
                 }, i, true, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 160,
+                    lineNumber: 169,
                     columnNumber: 11
                 }, this))
         }, void 0, false, {
             fileName: "[project]/storefront/components/Sections.tsx",
-            lineNumber: 158,
+            lineNumber: 167,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/storefront/components/Sections.tsx",
-        lineNumber: 157,
+        lineNumber: 166,
         columnNumber: 5
     }, this);
 }
@@ -663,7 +664,7 @@ function SectionHead({ id, index, title, note }) {
                 children: index
             }, void 0, false, {
                 fileName: "[project]/storefront/components/Sections.tsx",
-                lineNumber: 186,
+                lineNumber: 195,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -671,7 +672,7 @@ function SectionHead({ id, index, title, note }) {
                 children: title
             }, void 0, false, {
                 fileName: "[project]/storefront/components/Sections.tsx",
-                lineNumber: 187,
+                lineNumber: 196,
                 columnNumber: 7
             }, this),
             note && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -679,13 +680,13 @@ function SectionHead({ id, index, title, note }) {
                 children: note
             }, void 0, false, {
                 fileName: "[project]/storefront/components/Sections.tsx",
-                lineNumber: 188,
+                lineNumber: 197,
                 columnNumber: 16
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/storefront/components/Sections.tsx",
-        lineNumber: 182,
+        lineNumber: 191,
         columnNumber: 5
     }, this);
 }
@@ -721,7 +722,7 @@ function Booking() {
                             children: "How it works"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 224,
+                            lineNumber: 233,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -729,13 +730,13 @@ function Booking() {
                             children: "Booked, not gambled"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 225,
+                            lineNumber: 234,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 223,
+                    lineNumber: 232,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("ol", {
@@ -747,7 +748,7 @@ function Booking() {
                                     children: n
                                 }, void 0, false, {
                                     fileName: "[project]/storefront/components/Sections.tsx",
-                                    lineNumber: 236,
+                                    lineNumber: 245,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -755,7 +756,7 @@ function Booking() {
                                     children: title
                                 }, void 0, false, {
                                     fileName: "[project]/storefront/components/Sections.tsx",
-                                    lineNumber: 237,
+                                    lineNumber: 246,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -763,18 +764,18 @@ function Booking() {
                                     children: body
                                 }, void 0, false, {
                                     fileName: "[project]/storefront/components/Sections.tsx",
-                                    lineNumber: 238,
+                                    lineNumber: 247,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, n, true, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 232,
+                            lineNumber: 241,
                             columnNumber: 13
                         }, this))
                 }, void 0, false, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 230,
+                    lineNumber: 239,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -786,18 +787,18 @@ function Booking() {
                     ]
                 }, void 0, true, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 243,
+                    lineNumber: 252,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/storefront/components/Sections.tsx",
-            lineNumber: 222,
+            lineNumber: 231,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/storefront/components/Sections.tsx",
-        lineNumber: 221,
+        lineNumber: 230,
         columnNumber: 5
     }, this);
 }
@@ -814,7 +815,7 @@ function Bags() {
                 note: bag.blurb
             }, void 0, false, {
                 fileName: "[project]/storefront/components/Sections.tsx",
-                lineNumber: 266,
+                lineNumber: 275,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -829,12 +830,12 @@ function Bags() {
                             loading: "lazy"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Sections.tsx",
-                            lineNumber: 271,
+                            lineNumber: 280,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Sections.tsx",
-                        lineNumber: 269,
+                        lineNumber: 278,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -844,7 +845,7 @@ function Bags() {
                                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$lib$2f$catalogue$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["rupees"])(bag.price)
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 280,
+                                lineNumber: 289,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -852,14 +853,14 @@ function Bags() {
                                 children: "One price, every colour. Point at the one you want and we confirm it with our supplier before you pay anything."
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 281,
+                                lineNumber: 290,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(Rule, {
                                 children: "All 24 colours"
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 286,
+                                lineNumber: 295,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
@@ -872,19 +873,19 @@ function Bags() {
                                                 children: "/"
                                             }, void 0, false, {
                                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                                lineNumber: 290,
+                                                lineNumber: 299,
                                                 columnNumber: 17
                                             }, this),
                                             c
                                         ]
                                     }, c, true, {
                                         fileName: "[project]/storefront/components/Sections.tsx",
-                                        lineNumber: 289,
+                                        lineNumber: 298,
                                         columnNumber: 15
                                     }, this))
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 287,
+                                lineNumber: 296,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
@@ -893,25 +894,25 @@ function Bags() {
                                 children: "Ask about a colour →"
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 296,
+                                lineNumber: 305,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/storefront/components/Sections.tsx",
-                        lineNumber: 279,
+                        lineNumber: 288,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Sections.tsx",
-                lineNumber: 268,
+                lineNumber: 277,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/storefront/components/Sections.tsx",
-        lineNumber: 265,
+        lineNumber: 274,
         columnNumber: 5
     }, this);
 }
@@ -949,7 +950,7 @@ function Footer() {
                                         children: head
                                     }, void 0, false, {
                                         fileName: "[project]/storefront/components/Sections.tsx",
-                                        lineNumber: 330,
+                                        lineNumber: 339,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -957,18 +958,18 @@ function Footer() {
                                         children: body
                                     }, void 0, false, {
                                         fileName: "[project]/storefront/components/Sections.tsx",
-                                        lineNumber: 331,
+                                        lineNumber: 340,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, head, true, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 329,
+                                lineNumber: 338,
                                 columnNumber: 13
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Sections.tsx",
-                        lineNumber: 322,
+                        lineNumber: 331,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -982,7 +983,7 @@ function Footer() {
                                         children: "Prices shown are current. Colours and sizes are confirmed before any payment is taken."
                                     }, void 0, false, {
                                         fileName: "[project]/storefront/components/Sections.tsx",
-                                        lineNumber: 338,
+                                        lineNumber: 347,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$components$2f$ThemeSweep$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["ThemeSweep"], {
@@ -994,7 +995,7 @@ function Footer() {
                                                     children: "Theme"
                                                 }, void 0, false, {
                                                     fileName: "[project]/storefront/components/Sections.tsx",
-                                                    lineNumber: 352,
+                                                    lineNumber: 361,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$components$2f$ui$2f$theme$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["Theme"], {
@@ -1008,24 +1009,24 @@ function Footer() {
                                                     ]
                                                 }, void 0, false, {
                                                     fileName: "[project]/storefront/components/Sections.tsx",
-                                                    lineNumber: 353,
+                                                    lineNumber: 362,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/storefront/components/Sections.tsx",
-                                            lineNumber: 351,
+                                            lineNumber: 360,
                                             columnNumber: 15
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/storefront/components/Sections.tsx",
-                                        lineNumber: 350,
+                                        lineNumber: 359,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 337,
+                                lineNumber: 346,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
@@ -1034,13 +1035,13 @@ function Footer() {
                                 children: "Message the shop →"
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 358,
+                                lineNumber: 367,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/storefront/components/Sections.tsx",
-                        lineNumber: 336,
+                        lineNumber: 345,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1055,7 +1056,7 @@ function Footer() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 367,
+                                lineNumber: 376,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1079,24 +1080,24 @@ function Footer() {
                                         children: text
                                     }, href, false, {
                                         fileName: "[project]/storefront/components/Sections.tsx",
-                                        lineNumber: 377,
+                                        lineNumber: 386,
                                         columnNumber: 15
                                     }, this))
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Sections.tsx",
-                                lineNumber: 371,
+                                lineNumber: 380,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/storefront/components/Sections.tsx",
-                        lineNumber: 366,
+                        lineNumber: 375,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Sections.tsx",
-                lineNumber: 321,
+                lineNumber: 330,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1129,23 +1130,23 @@ function Footer() {
                         }
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Sections.tsx",
-                        lineNumber: 444,
+                        lineNumber: 453,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/storefront/components/Sections.tsx",
-                    lineNumber: 427,
+                    lineNumber: 436,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/storefront/components/Sections.tsx",
-                lineNumber: 410,
+                lineNumber: 419,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/storefront/components/Sections.tsx",
-        lineNumber: 320,
+        lineNumber: 329,
         columnNumber: 5
     }, this);
 }
@@ -1245,7 +1246,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                         fill: "transparent"
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 78,
+                        lineNumber: 83,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1255,18 +1256,18 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                             d: "M647.39 189.276C647.834 189.394 648.025 189.429 648.479 189.634C656.87 193.43 804.684 484.046 813.36 511.626C794.354 513.733 771.913 512.989 752.52 512.85C736.498 475.084 714.214 431.864 696.687 394.268C685.154 369.53 664.857 324.833 651.092 303.01C647.071 307 634.237 331.223 631.077 337.117C611.412 374.179 592.575 411.675 574.582 449.577C565.16 469.383 554.573 493.943 544.642 512.863C525.166 513.413 503.712 513.043 484.075 513.115C494.67 492.654 504.482 470.85 514.658 450.061C542.428 391.992 570.962 334.291 600.25 276.972C615.021 248.094 630.631 216.969 647.39 189.276Z"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Wordmark.tsx",
-                            lineNumber: 86,
+                            lineNumber: 91,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 85,
+                        lineNumber: 90,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                lineNumber: 75,
+                lineNumber: 80,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1281,7 +1282,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                         fill: "transparent"
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 92,
+                        lineNumber: 97,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1292,7 +1293,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                                 d: "M987.683 187.863C1014.48 186.813 1046.11 187.661 1073.32 187.663L1223.62 187.817L1223.88 241.841C1171.24 243.26 1114.42 241.415 1061.55 241.39C1043.21 241.382 1006.21 241.098 989.63 238.344C987.029 225.704 987.645 201.702 987.683 187.863Z"
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                                lineNumber: 100,
+                                lineNumber: 105,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
@@ -1300,7 +1301,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                                 d: "M987.253 325.975C1013.6 325.423 1041.83 325.934 1068.3 325.933L1223.8 325.996L1224.06 375.034L987.358 374.952L987.253 325.975Z"
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                                lineNumber: 101,
+                                lineNumber: 106,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
@@ -1308,19 +1309,19 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                                 d: "M987.34 464.169C1014.06 463.49 1043.44 464.092 1070.34 464.084L1223.82 464.154C1223.79 480.566 1223.87 496.979 1224.04 513.391L987.556 513.438L987.34 464.169Z"
                             }, void 0, false, {
                                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                                lineNumber: 102,
+                                lineNumber: 107,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 99,
+                        lineNumber: 104,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                lineNumber: 89,
+                lineNumber: 94,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1335,7 +1336,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                         fill: "transparent"
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 108,
+                        lineNumber: 113,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1345,18 +1346,18 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                             d: "M1614 187.518C1625.31 186.962 1638 187.157 1649.43 187.112C1646.46 198.798 1641.07 224.655 1632.76 232.733C1618.65 246.455 1514.9 236.978 1488.06 244C1482.09 245.564 1476.84 248.49 1472.44 252.845C1465.23 259.979 1460.38 270.627 1460.41 280.83C1460.44 288.701 1463.93 295.558 1469.97 300.537C1495.42 321.504 1571.28 328.287 1605.41 341.326C1616.89 345.591 1627.31 352.283 1635.96 360.945C1670.53 395.27 1668.98 453.036 1634.57 486.892C1624.46 496.91 1611.99 504.226 1598.31 508.171C1579.43 513.517 1549 513.096 1529.21 513.266C1499.89 513.453 1470.57 513.349 1441.25 512.952C1427.57 512.338 1416.23 512.365 1402.93 508.797C1403.85 495.94 1413.2 478.296 1418.87 466.383C1429.8 465.478 1445.58 465.518 1456.8 465.192L1528.17 463.063C1541.82 462.67 1585.9 463.518 1593.02 452.075C1625.46 399.925 1581.2 386.566 1540.81 379.425C1482.36 369.093 1405.45 355.664 1404.23 282.276C1403.96 258.082 1413.43 234.796 1430.52 217.662C1440.89 207.12 1453.7 199.301 1467.82 194.899C1486.37 189.308 1516.75 189.265 1536.77 188.784C1562.51 188.208 1588.25 187.786 1614 187.518Z"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Wordmark.tsx",
-                            lineNumber: 116,
+                            lineNumber: 121,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 115,
+                        lineNumber: 120,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                lineNumber: 105,
+                lineNumber: 110,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1371,7 +1372,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                         fill: "transparent"
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 122,
+                        lineNumber: 127,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1381,18 +1382,18 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                             d: "M1801.42 188.112C1809.97 187.244 1824.78 187.674 1833.72 187.684L1890.22 187.721L2066.8 187.821C2066.81 204.627 2065.85 222.262 2065.18 239.117C2031.84 240.678 1997.2 241.191 1963.74 242.09L1963.65 409.5L1963.54 513.086C1947.05 513.979 1921.88 513.56 1905.18 513.164L1905.22 242.044C1871.48 241.305 1837.75 240.395 1804.02 239.316C1803.31 221.929 1802.84 205.486 1801.42 188.112Z"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Wordmark.tsx",
-                            lineNumber: 130,
+                            lineNumber: 135,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 129,
+                        lineNumber: 134,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                lineNumber: 119,
+                lineNumber: 124,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1407,7 +1408,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                         fill: "transparent"
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 136,
+                        lineNumber: 141,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1417,18 +1418,18 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                             d: "M2235.95 186.808C2253.05 188.83 2274.18 188.534 2292.25 190.116L2292.23 191.284C2291.86 226.408 2294.14 265.194 2294.58 301.206C2295.03 338.725 2295.89 383.901 2301.27 420.915C2302.9 428.629 2308.14 435.365 2313.43 440.838C2353.5 482.273 2443.08 476.847 2457.28 413.442C2463.33 386.435 2462.34 350.971 2462.59 322.471L2462.94 187.769C2482.6 187.612 2502.26 187.591 2521.92 187.706L2521.7 239.821C2521.77 266.957 2521.6 294.093 2521.19 321.225C2520.64 373.015 2525.25 436.555 2486.3 476.157C2447.09 516.032 2415.99 517.143 2363.97 517.77C2328.44 518.198 2293.6 501.622 2268.51 476.788C2256.17 464.552 2247.32 449.245 2242.87 432.446C2234.97 402.595 2236.42 344.953 2236.37 312.615L2235.95 186.808Z"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Wordmark.tsx",
-                            lineNumber: 144,
+                            lineNumber: 149,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 143,
+                        lineNumber: 148,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                lineNumber: 133,
+                lineNumber: 138,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1443,7 +1444,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                         fill: "transparent"
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 150,
+                        lineNumber: 155,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1453,18 +1454,18 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                             d: "M2704.89 187.081C2729.79 186.139 2759.65 188.01 2785.05 188.105C2812.43 189.024 2840.5 188.574 2867.72 191.382C2937.23 198.55 2979.02 273.905 2949.61 337.137C2940.1 357.585 2925.37 376.404 2905.75 387.782C2899.27 391.539 2888.12 394.799 2880.87 397.575C2886.14 406.864 2896.43 420.144 2903.04 429.002L2943.34 482.377C2950.5 491.847 2959.81 503.548 2966.11 513.369C2943.77 513.532 2921.42 513.499 2899.07 513.271C2876.32 482.616 2853.88 451.734 2831.75 420.63C2828.25 415.347 2824.32 410.106 2820.58 404.968C2799.92 405.062 2779.25 404.975 2758.59 404.708L2758.41 513.242C2742.36 513.663 2720.92 513.704 2705.06 512.985C2703.94 460.776 2705.01 408.054 2704.72 355.741C2744.89 353.964 2855.36 362.64 2883.29 340.135C2893.82 331.653 2899.39 317.682 2900.76 304.532C2902.51 287.741 2898.89 268.899 2888 255.601C2885.13 252.099 2881.45 248.491 2877.09 246.987C2865.23 242.892 2850.28 243.289 2837.81 242.798C2808.57 241.649 2779.38 241.859 2750.12 241.911C2735.2 241.938 2719.57 242.841 2704.73 241.432C2704.61 223.315 2704.66 205.197 2704.89 187.081Z"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Wordmark.tsx",
-                            lineNumber: 158,
+                            lineNumber: 163,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 157,
+                        lineNumber: 162,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                lineNumber: 147,
+                lineNumber: 152,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1479,7 +1480,7 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                         fill: "transparent"
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 164,
+                        lineNumber: 169,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$storefront$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
@@ -1489,24 +1490,24 @@ function Wordmark({ className, style, tighten = 0, respond = false }) {
                             d: "M3275.1 189.846C3285.58 195.255 3422.97 477.351 3439.86 511.659C3420.07 513.542 3399.47 511.881 3379.57 510.866C3364.11 480.892 3287.49 310.735 3276.9 301.703C3271.75 306.885 3259.82 332.69 3255.52 341.077C3226.42 398.034 3198.29 455.487 3171.16 513.41L3109.88 513.284C3132.25 466.995 3156.87 419.509 3180.19 373.514C3210.48 313.774 3241.94 247.865 3275.1 189.846Z"
                         }, void 0, false, {
                             fileName: "[project]/storefront/components/Wordmark.tsx",
-                            lineNumber: 172,
+                            lineNumber: 177,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/storefront/components/Wordmark.tsx",
-                        lineNumber: 171,
+                        lineNumber: 176,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/storefront/components/Wordmark.tsx",
-                lineNumber: 161,
+                lineNumber: 166,
                 columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/storefront/components/Wordmark.tsx",
-        lineNumber: 62,
+        lineNumber: 67,
         columnNumber: 5
     }, this);
 }

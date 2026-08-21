@@ -1,4 +1,5 @@
 import { Theme } from '@/components/ui/theme';
+import { Mark } from '@/components/Mark';
 import { ThemeSweep } from '@/components/ThemeSweep';
 import { Wordmark, wordmarkAspect } from '@/components/Wordmark';
 import {
@@ -13,13 +14,17 @@ import {
  * How the mark sits at the foot of the page.
  *
  * Kept together and named, because the three are arithmetically linked: the
- * crop box is sized from the mark's aspect, the fraction of the width it
- * takes, and the fraction of it left showing. Change one in isolation and
- * the mark either leaves a gap under itself or loses the wrong amount.
+ * crop box is sized from the mark's aspect ratio, the share of the width it
+ * takes, and the share of it left showing. Change one in isolation and the
+ * mark either leaves a gap under itself or loses the wrong amount.
+ *
+ * `tighten` closes the spacing between the letters - 0 is the artwork's own
+ * tracking, 1 has them touching. `shown` is how much of the mark's height
+ * survives the crop.
  */
 const FOOT_TIGHTEN = 0.72;
 const FOOT_WIDTH = 0.46;
-const FOOT_SHOWN = 0.9;
+const FOOT_SHOWN = 0.7;
 
 /** A thin rule with a mono caption sitting on it - the page's only divider. */
 function Rule({ children }: { children?: React.ReactNode }) {
@@ -56,8 +61,35 @@ export function Nav() {
           choose, and it would stop sitting level with the bar at some
           breakpoint.
         */}
-        <a href="/" className="shrink-0" aria-label="AESTURA, back to the shop">
-          <Wordmark className="h-[1.15rem] w-auto sm:h-6" />
+        <a
+          href="/"
+          className="flex shrink-0 items-center gap-2.5 sm:gap-3"
+          aria-label="AESTURA, back to the shop"
+        >
+          {/*
+            The picture mark reads at a larger height than the wordmark.
+            
+            Its cap is a single peak with a lot of air either side of it, so
+            matched to the letters it looked like the smaller of the two. A
+            touch taller puts the two on the same optical line, which is not
+            the same as the same measured height.
+
+            Only the wordmark carries the label. Both marks say AESTURA, and
+            announcing it twice in one link is how a screen reader ends up
+            reading the shop's name three times before the nav.
+          */}
+          <Mark className="h-[1.6rem] w-auto sm:h-8" aria-hidden />
+
+          {/*
+            respond here too, and overflow-visible with it.
+
+            The SVG clips to its own viewBox, which is cropped tight to the
+            letters - so without this the glow is cut off at the edge of each
+            glyph and the letter grows into nothing. The bar itself does not
+            hide its overflow, so the light is free to fall onto the page
+            below it, which is where a light should fall.
+          */}
+          <Wordmark respond className="h-[1.15rem] w-auto overflow-visible sm:h-6" />
         </a>
 
         <div className="hidden gap-8 md:flex">
@@ -392,54 +424,67 @@ export function Footer() {
         This was the word set in the poster face, which put a typed version of
         the shop's name at the bottom of the same page whose bar carries the
         actual artwork - two different letterforms claiming to be one name.
-        Now it is the same vector.
+        Now it is the same vector, running off the bottom of the sheet the
+        way a stamp does on the back of a bag tag.
 
-        It is cropped rather than simply pulled down. The visible fraction is
-        named once, below, and the box is sized from the mark's own aspect
-        ratio - so the mark keeps its proportions, exactly a tenth of it is
-        hidden, and no empty strip is left underneath. Pulling it down with a
-        negative margin would have been shorter and wrong: percentage margins
-        resolve against the container's WIDTH, so the amount hidden would
-        have changed every time the window did.
-
-        The box runs the full width even though the mark does not, which
-        leaves the outermost letters somewhere to throw their glow. It is
-        aria-hidden because the mark in the bar has already announced the
-        shop and a screen reader should not read it twice.
+        It is aria-hidden because the mark in the bar has already announced
+        the shop and a screen reader should not read it twice.
       */}
-      <div aria-hidden className="mt-4 px-5">
+      <div aria-hidden className="px-5 pt-6">
+        {/*
+          Room at the top, and nowhere else.
+
+          The room has to be INSIDE something that clips, or it is not room -
+          it is overflow, and overflow counts: the document went on for
+          another 52px of empty scroll past the last thing anyone could see,
+          which is the blank strip under the page. overflow-clip with a zero
+          margin removes that contribution, but a zero margin also cuts the
+          glow and the lifted letter off at the box edge.
+
+          So the box is grown upwards by five rem and pulled back up by the
+          same amount. Layout is unchanged, the extra height is empty space
+          the letter can grow into, and it is all within the clip - so
+          nothing escapes to lengthen the page. The bottom needs no room
+          because the bottom is where the mark is deliberately cut, and the
+          sides need none because the box is full width while the mark is
+          under half of it.
+        */}
+        <div className="-mt-20 overflow-clip pt-20">
         {/*
           Cut at the bottom only, and nowhere else.
 
           overflow-hidden cropped all four sides, so the moment a letter grew
-          under the cursor its top was sliced off against the box - the
-          crop meant to hide a tenth of the mark was also eating the hover.
-          An inset clip with negative offsets on three sides leaves the top
-          and the flanks open for the letter and its light, and still cuts
-          the bottom exactly where the box ends.
+          under the cursor its top was sliced off against the box - the crop
+          meant to hide part of the mark was also eating the hover. An inset
+          clip with negative offsets on three sides leaves the top and the
+          flanks open for the letter and its light, and still cuts the bottom
+          exactly where the box ends.
 
-          Padding is kept off this box on purpose. aspect-ratio sizes the
-          border box, so a padding-top here would count as part of the height
-          and the mark would lose more of itself than asked for - it measured
-          91.4% shown against a stated 90% until the spacing moved out to the
-          wrapper.
+          Zero height plus percentage padding, not aspect-ratio. aspect-ratio
+          is only a PREFERRED size: once the box stopped hiding its overflow
+          it simply grew to fit the mark, the bottom edge landed under the
+          last pixel of it, and the crop quietly stopped existing - measured
+          at 100% shown against a stated 90%. A definite height of zero cannot
+          grow, and percentage padding resolves against the box's own width,
+          which is what keeps the visible share the same at every window size.
+
+          The box runs the full width even though the mark does not, which
+          leaves the outermost letters somewhere to throw their glow.
+
+          overflow-clip is what stops the page ending in nothing. clip-path
+          hides the overhanging part of the mark but does not stop it
+          counting: the document went on for another 52px of empty scroll
+          past the last thing anyone could see. `clip` removes that
+          contribution, and the clip-margin gives the glow and the lifted
+          letter room to paint beyond the box anyway - which plain
+          overflow-hidden would have taken away again.
         */}
         <div
-          className="w-full [clip-path:inset(-100vh_-100vw_0_-100vw)]"
-          /**
-           * Zero height plus a percentage of padding, not aspect-ratio.
-           *
-           * aspect-ratio is only a PREFERRED size: once the box stopped
-           * hiding its overflow it simply grew to fit the mark, the bottom
-           * edge landed under the last pixel of it, and the crop quietly
-           * stopped existing - measured at 100% shown against a stated 90%.
-           *
-           * A definite height of zero cannot grow. Percentage padding
-           * resolves against the box's own width, which is exactly what is
-           * wanted here, so the visible strip stays the same fraction of the
-           * mark at every window size.
-           */
-          style={{ height: 0, paddingBottom: `${(FOOT_SHOWN * FOOT_WIDTH * 100) / wordmarkAspect(FOOT_TIGHTEN)}%` }}
+          className="w-full"
+          style={{
+            height: 0,
+            paddingBottom: `${(FOOT_SHOWN * FOOT_WIDTH * 100) / wordmarkAspect(FOOT_TIGHTEN)}%`,
+          }}
         >
           <Wordmark
             respond
@@ -447,6 +492,7 @@ export function Footer() {
             className="mx-auto block h-auto overflow-visible text-ghost"
             style={{ width: `${FOOT_WIDTH * 100}%` }}
           />
+          </div>
         </div>
       </div>
     </footer>
