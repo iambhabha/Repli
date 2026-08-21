@@ -16,7 +16,6 @@ const parser = require('./parser');
 const categoryService = require('../services/categoryService');
 const settingsService = require('../services/settingsService');
 const faq = require('./faq');
-const understand = require('../ai/understand');
 const replyComposer = require('../ai/reply');
 const converse = require('../ai/converse');
 const brain = require('../ai/brain');
@@ -243,6 +242,43 @@ async function sendWelcome(bot, phone, category = null) {
 }
 
 /**
+ * The words for each step, used to check a composed sentence points at the
+ * step the shop is actually on.
+ *
+ * A live trace: the customer was choosing a size, the turn could not be
+ * executed, and the composer - told the phase was "choosing a size" - wrote
+ * "Kaunsa design dekhna hai?". The design was chosen two messages earlier.
+ * Nothing caught it, because free prose was allowed to be the question: it
+ * invented no number, claimed nothing done, and was still wrong.
+ *
+ * So when the shop is waiting on one specific answer, a sentence that names
+ * a DIFFERENT step and not this one is dropped and the shop asks in its own
+ * words instead. Only that case - a reply that names neither, or names this
+ * step, is left exactly as written.
+ */
+const STEP_WORDS = {
+  [STATES.SELECT_PRODUCT]: ['design', 'product', 'style', 'brand'],
+  [STATES.SELECT_COLOR]: ['colour', 'color', 'rang'],
+  [STATES.SELECT_SIZE]: ['size', 'saiz', 'naap'],
+  [STATES.SELECT_QUANTITY]: ['quantity', 'kitne', 'piece'],
+  [STATES.COLLECT_DETAILS]: ['address', 'pata', 'pincode', 'pin code'],
+};
+
+/** True when `written` asks about some other step and never mentions this one. */
+function pointsAtTheWrongStep(written, state) {
+  const mine = STEP_WORDS[state];
+  if (!mine) return false;
+
+  const body = String(written || '').toLowerCase();
+  if (mine.some((word) => body.includes(word))) return false;
+
+  return Object.entries(STEP_WORDS).some(
+    ([other, words]) => other !== state && words.some((word) => body.includes(word))
+  );
+}
+
+
+/**
  * The reply for when the script has nothing good to say.
  *
  * Sends an AI-composed answer built from the shop's own facts, and falls
@@ -383,7 +419,7 @@ async function offScript(bot, phone, convo, text, { phase, needed = '', fallback
     .compose({ text, phase, needed, facts, history, phone })
     .catch(() => null);
 
-  if (written) {
+  if (written && !(waitingOnThem && pointsAtTheWrongStep(written, convo.state))) {
     // raw: the model wrote this one; rewriting it again would only blur it.
     await bot.sendMessage(phone, written, { raw: true });
     return `ai_reply_${phase}`;
@@ -498,7 +534,7 @@ async function tryImageRequest(bot, phone, convo, text, product = null) {
    * "venom ki photo bhejo" while holding the Spider-Man is a request to see
    * the Venom, not the shirt already in hand.
    */
-  const named = parser.detectProductByKeyword(text, products);
+  const named = null;
 
   /**
    * Naming a design while still browsing also CHOOSES it - that is plainly
@@ -710,7 +746,7 @@ async function aiDecide(bot, phone, convo, text, intent) {
 async function trySwitchItem(bot, phone, convo, text) {
   const products = await productService.activeProducts();
 
-  const named = parser.detectProductByKeyword(text, products);
+  const named = null;
   const category = named ? named.category : parser.detectCategory(text);
   if (!category) return null;
 
@@ -837,7 +873,7 @@ const hasScanner = async () =>
 async function tryBrowseWhilePaying(bot, phone, text, order, { remind = true } = {}) {
   const products = await productService.activeProducts();
 
-  const named = parser.detectProductByKeyword(text, products);
+  const named = null;
   const category = named ? named.category : parser.detectCategory(text);
   if (!category) return null;
 
@@ -858,15 +894,32 @@ async function tryBrowseWhilePaying(bot, phone, text, order, { remind = true } =
 }
 
 /** Product chosen -> ask colour, or skip when there is only one. */
-async function afterProductSelected(bot, phone, product) {
+async function afterProductSelected(bot, phone, product, extra = {}) {
   const colors = await productService.colorsOf(product);
 
   // One colour, or none at all (hoodies are ordered by size only). Either
   // way there is nothing to ask - asking would be a question with one
   // possible answer, which the sales memory calls overloading the customer.
   if (colors.length <= 1) {
-    return afterColorSelected(bot, phone, product, colors[0] || null);
+    return afterColorSelected(bot, phone, product, colors[0] || null, extra);
   }
+
+  /**
+   * The picture goes with the question.
+   *
+   * Twenty-four colour names in a message is not a choice anybody can make.
+   * The shop's own photograph of the bag is its printed colour chart - every
+   * colour, named, with the price under each - so the question and the thing
+   * being asked about arrive together and the customer can point at one.
+   *
+   * The chart is sent plain. Marked-up copies with the chosen colour ticked
+   * were built and uploaded, and the owner's decision was to leave them out:
+   * the customer marks the one they want themselves and a person picks it up
+   * from there. scripts/mark-bag-colours.js still builds them if that is
+   * ever revisited.
+   */
+  const chart = (await productService.imagesFor(product).catch(() => []))[0] || null;
+  if (chart) await bot.sendImage(phone, chart, '');
 
   await bot.sendMessage(phone, bot.t.chooseColor(product, colors));
   await conversationService.save(
@@ -900,12 +953,23 @@ async function afterColorSelected(bot, phone, product, color, extra = {}) {
     }
 
     const allSizes = await productService.sizesOf(product);
-    await bot.sendMessage(
-      phone,
-      extra.combined
-        ? bot.t.colorPickedNowSize(product, color, sizesLeft)
-        : bot.t.chooseSize(allSizes)
-    );
+
+    /**
+     * Silent when a size is already coming.
+     *
+     * "red wala L" gives the colour and the size at once. Asking "kaunsa
+     * size chahiye?" and answering it in the same breath makes the shop look
+     * like it was not listening - the customer reads a question they had
+     * already answered, immediately followed by the answer.
+     */
+    if (!extra.quiet) {
+      await bot.sendMessage(
+        phone,
+        extra.combined
+          ? bot.t.colorPickedNowSize(product, color, sizesLeft)
+          : bot.t.chooseSize(allSizes)
+      );
+    }
     await conversationService.save(phone, {
       state: STATES.SELECT_SIZE,
       selected_product_id: product.id,
@@ -1212,20 +1276,26 @@ async function createOrderAndAskPayment(bot, phone, convo) {
   const order = await orderService.create(phone, draft);
 
   /**
-   * The booking confirmation carries no scanner.
+   * The booking number and the scanner go out together.
    *
-   * They already have it - it went out with the details form, several
-   * messages ago, and many customers pay from it before they finish typing
-   * the address. Sending the same QR again underneath "Booking #REP-1234,
-   * abhi dena hai Rs500" reads as the shop not having noticed, to somebody
-   * who may have already paid.
+   * This used to send the number alone, on the reasoning that the QR had
+   * already gone out with the details form and repeating it would look like
+   * the shop had not noticed a payment. The owner watched real customers
+   * hit it and asked for the opposite, which is their call to make: by the
+   * time the booking number arrives the scanner is several messages up the
+   * chat, above a photo or two and a typed-out address, and "abhi Rs500
+   * dena hai" with nothing to pay into is a dead end.
    *
-   * The typed UPI id stays out of the message for the same reason it is out
-   * everywhere else: one payment destination, and it is the picture. If they
-   * want it back on screen, "payment kaha karu" sends it - and that is a
-   * customer asking, rather than the shop guessing.
+   * The reasoning behind the old behaviour is kept as the condition. Nobody
+   * who has already paid is shown the QR again - that was the case worth
+   * protecting, and it is checked rather than assumed.
    */
   await bot.sendMessage(phone, bot.t.paymentInstructions(order, { scanner: await hasScanner() }));
+
+  if (String(order.payment_status || '').toLowerCase() !== 'paid') {
+    const scanner = await paymentService.paymentQrImage().catch(() => null);
+    if (scanner) await bot.sendImage(phone, scanner, '');
+  }
   await conversationService.save(phone, {
     state: STATES.WAITING_FOR_PAYMENT,
     current_order_id: order.id,
@@ -1354,22 +1424,26 @@ async function handleQuantity(bot, phone, convo, text) {
   let quantity = parser.parseQuantity(text);
   if (quantity === null && offered && parser.isYes(text)) quantity = offered;
 
-  // "ek jodi", "dono bhej do", "bas itna hi" - a number the digits missed.
-  // The options are capped at MAX_QTY, so the model cannot ask for 500 pieces.
-  if (quantity === null) {
-    const guess = await understand.pick({
-      phone,
-      text,
-      question: 'how many pieces do they want?',
-      options: Array.from({ length: config.MAX_QTY }, (_, index) => String(index + 1)),
-    });
-    if (guess) quantity = parseInt(guess, 10);
-  }
-
   if (quantity === null) {
     await bot.sendMessage(phone, bot.t.quantityNotUnderstood());
     return 'quantity_unclear';
   }
+
+  return applyQuantity(bot, phone, convo, product, quantity);
+}
+
+/**
+ * A quantity that has been decided, checked against the lot and acted on.
+ *
+ * Split out of handleQuantity for the same reason applySize was: so the
+ * executor can carry out a number the brain resolved without handing the
+ * sentence back to a parser. Everything that makes a quantity safe is here
+ * rather than in the deciding - the cap, and live stock.
+ */
+async function applyQuantity(bot, phone, convo, product, quantity) {
+  const color = colorOf(convo);
+  const size = sizeOf(convo);
+
   if (quantity > config.MAX_QTY) {
     await bot.sendMessage(phone, bot.t.quantityTooHigh(config.MAX_QTY));
     return 'quantity_too_high';
@@ -1402,15 +1476,7 @@ async function handleSize(bot, phone, convo, text) {
   }
 
   const sizes = await productService.sizesOf(product);
-  let size = parser.detectSize(text, sizes);
-  if (!size) {
-    size = await understand.pick({
-      phone,
-      text,
-      question: `which size? (${sizes.join(', ')})`,
-      options: sizes,
-    });
-  }
+  const size = null;
   if (!size) {
     return offScript(bot, phone, convo, text, {
       phase: 'choosing a size',
@@ -1419,6 +1485,23 @@ async function handleSize(bot, phone, convo, text) {
     });
   }
 
+  return applySize(bot, phone, convo, product, size);
+}
+
+/**
+ * A size that has been decided, checked against stock and acted on.
+ *
+ * Split out of handleSize so the executor can carry out a size the brain
+ * resolved without handing the raw sentence back to a parser - which would
+ * be a second reading of the same message, and a second chance to disagree
+ * with the first.
+ *
+ * Everything that makes a size safe is here rather than in the deciding:
+ * stock is read live, the variant is looked up, and an unavailable size is
+ * refused with the ones that are left. A model naming a size does not make
+ * it available.
+ */
+async function applySize(bot, phone, convo, product, size) {
   const color = colorOf(convo);
   if ((await productService.stockOf(product.id, color, size)) <= 0) {
     await bot.sendMessage(
@@ -1510,77 +1593,25 @@ async function handleMedia(bot, phone, convo, msg) {
   return 'payment_proof';
 }
 
-/** Product (and maybe colour/size/quantity) named in one free-text message. */
-async function handleFreeTextOrder(bot, phone, text, product) {
-  const colors = await productService.colorsOf(product);
-
-  /**
-   * A design with one colour has already told us the colour.
-   *
-   * Without this, "spiderman XL me hai kya" fell back to asking which
-   * design/size, throwing away the size they had just given - the colour
-   * check was gating the size check, and Spider-Man only comes in red.
-   */
-  const color =
-    parser.detectColorByKeyword(text, colors) || (colors.length <= 1 ? colors[0] || null : null);
-
-  if (!color) return afterProductSelected(bot, phone, product);
-
-  const hasSizes = await productService.hasSizes(product);
-  if (!hasSizes) return afterColorSelected(bot, phone, product, color);
-
-  const allSizes = await productService.sizesOf(product);
-  const size = parser.detectSize(text, allSizes);
-
-  if (size && (await productService.stockOf(product.id, color, size)) > 0) {
-    const variant = await productService.findVariant(product.id, color, size);
-    await bot.sendMessage(
-      phone,
-      bot.t.available(product, color, size, productService.priceOf(product))
-    );
-    const saved = await conversationService.save(
-      phone,
-      conversationService.clearedCart({
-        selected_product_id: product.id,
-        selected_variant_id: variant ? variant.id : null,
-        quantity: 1,
-        data: { color, size },
-      })
-    );
-    // Design, colour and size all came in one message - straight to details.
-    return goToDetails(bot, phone, { ...saved, data: saved.data || {} });
-  }
-
-  return afterColorSelected(bot, phone, product, color, { combined: true });
-}
-
-// ------------------------------------------------------------- entry point
-
-/**
- * Handle one customer message. Returns the detected action, for logging.
- */
-/**
- * Build the context the brain needs, and ask it.
- *
- * Only what this turn can use. The whole shop used to go into every prompt -
- * every design, the material, the hoodie lead time, twenty-four colours of a
- * sold-out backpack - and most of it could not affect the answer. What is
- * here is what makes a reference resolvable:
- *
- *   chosen  what they have already picked, so "iska" has a referent
- *   shown   the designs last put on their screen, so "pehla wala" and "jo
- *           dikhaya tha" mean something instead of nothing
- *   phase   where the conversation is, so a bare colour is read as a colour
- *           and not as a department
- *
- * History is two turns and already redacted - anything older has been acted
- * on and cannot change this reply, so it only costs tokens and widens what a
- * customer's own words can reach.
- */
 async function think(bot, phone, convo, text) {
   const askedTopic = parser.detectQuestion(text);
 
-  const reading = await context
+  /**
+   * Two readings, because they answer two different questions.
+   *
+   * `facts` is what the shop may state, and narrowing it to the chosen
+   * design is the whole reason scoping exists - nobody needs twenty-four
+   * backpack colours to answer a question about a hoodie.
+   *
+   * The allow-lists are not that. They are the set of names a decision is
+   * permitted to contain, and they have to be the live catalogue whatever
+   * the customer happens to have selected. Scoped, they came back as
+   * `designs: [null]` and `sizes: []` the moment a product was chosen - so
+   * every decision the brain made from then on named something that was not
+   * on its own list, was rejected as `bad_product`, and the shop quietly
+   * fell back to keyword matching for the rest of the conversation.
+   */
+  const scoped = await context
     .forTurn({
       catalogue: true,
       topic: askedTopic,
@@ -1589,7 +1620,15 @@ async function think(bot, phone, convo, text) {
       colour: colorOf(convo),
     })
     .catch(() => null);
-  if (!reading) return null;
+  if (!scoped) return null;
+
+  const catalogue = await context.forTurn({ catalogue: true, prices: false }).catch(() => null);
+  const reading = {
+    facts: scoped.facts,
+    designs: (catalogue && catalogue.designs) || scoped.designs,
+    colours: (catalogue && catalogue.colours) || scoped.colours,
+    sizes: (catalogue && catalogue.sizes) || scoped.sizes,
+  };
 
   /** What they already hold, named the way a customer would say it. */
   let chosen = '';
@@ -1616,7 +1655,38 @@ async function think(bot, phone, convo, text) {
   const draft = draftOf(convo);
   const known = DETAIL_FIELDS.filter((field) => draft[field]).join(', ');
 
+  /**
+   * Which colours and sizes each design actually comes in.
+   *
+   * Without this the brain was handed a list of designs and a separate list
+   * of every colour in the shop, with nothing joining them. Asked about
+   * "Red" it answered design Venom - the black shirt - because it had no
+   * way to know Red is the Spider-Man. The pairing is small enough to send
+   * on every turn and it is the difference between reading a catalogue and
+   * guessing from two columns.
+   *
+   * Read from the database each turn, so a colour that sells out stops
+   * being offered without anything here changing.
+   */
+  const everything = await productService.activeProducts().catch(() => []);
+  const pairs = [];
+  for (const item of everything) {
+    const [itemColours, itemSizes] = await Promise.all([
+      productService.colorsOf(item).catch(() => []),
+      productService.sizesOf(item).catch(() => []),
+    ]);
+    const wearable = itemColours.filter((value) => value && value !== 'Default');
+    pairs.push(
+      [
+        `- ${item.design || item.name}`,
+        wearable.length ? `colours: ${wearable.join('/')}` : 'one colour only',
+        itemSizes.length ? `sizes: ${itemSizes.join('/')}` : 'no sizes',
+      ].join(' | ')
+    );
+  }
+
   return brain.decide({
+    pairs,
     phone,
     text,
     facts: reading.facts,
@@ -1645,6 +1715,16 @@ async function think(bot, phone, convo, text) {
  * a size are all deliberately absent - those keep their own handlers, which
  * check stock and consent in the order this shop needs them checked.
  */
+/** The address on the summary was wrong: take the details again. */
+async function editDetails(bot, phone, convo) {
+  await bot.sendMessage(phone, bot.t.askDetails());
+  await conversationService.save(phone, {
+    state: STATES.COLLECT_DETAILS,
+    data: { ...convo.data, draft: {}, awaiting: 'name' },
+  });
+  return 'summary_declined';
+}
+
 const runDecision = createExecutor({
   sendGreeting,
   sendWelcome,
@@ -1654,7 +1734,11 @@ const runDecision = createExecutor({
   afterColorSelected,
   goToDetails,
   goToHuman,
-  freeTextOrder: handleFreeTextOrder,
+  applySize,
+  applyQuantity,
+  editDetails,
+  buildDraft,
+  createOrder: createOrderAndAskPayment,
   cancelOrder: async (bot, phone) => {
     await orderService.cancelOpen(phone);
     await conversationService.save(
@@ -1826,7 +1910,7 @@ async function handleMessage(bot, msg) {
      * A message that names a design is a choice; the FAQ only gets what is
      * left over.
      */
-    const namesDesign = parser.detectProductByKeyword(text, await productService.activeProducts());
+    const namesDesign = null;
     if (!namesDesign && (await faq.tryAnswer(bot, phone, question, { pack: bot.t, convo }))) {
       return `answered_${question}`;
     }
@@ -1913,41 +1997,19 @@ async function handleMessage(bot, msg) {
       const all = await productService.activeProducts();
 
       /**
-       * The fallback, now that the brain has already had this message.
+       * No spelling dictionary here any more.
        *
-       * A spelling dictionary - 'spidey', 'lal tshirt', 'jhola' - used to
-       * decide this, before any model saw the sentence. It still decides it
-       * HERE, but "here" is now only reached when the brain produced nothing:
-       * no key, no budget, a rejected read, or an honest "not sure". A second
-       * model call in this branch was tried and removed; one orchestrator
-       * reading the message once is the point of the change.
+       * A design used to be resolved from 'spidey', 'lal tshirt', 'jhola'
+       * when the brain produced nothing - which meant the shop still had a
+       * second way to turn language into a product, just a worse one. With
+       * the model unavailable it would happily select something the model
+       * had never been asked about.
+       *
+       * Now the only reference the flow resolves on its own is a number
+       * into the list it just printed. Everything else waits for the brain,
+       * and when the brain cannot answer the customer is asked rather than
+       * guessed at.
        */
-      const byKeyword = parser.detectProductByKeyword(text, all);
-
-      if (byKeyword) {
-        /**
-         * "venom kitne ka hai" names a design AND asks a price. Answering
-         * only one of the two is what makes a bot feel like a form: give
-         * the answer, then continue from the design they just named.
-         *
-         * "stock" is the exception - "hai kya?" is best answered by asking
-         * which size, which is what continuing does anyway.
-         */
-        const about = parser.detectQuestion(text);
-
-        if (about && about !== 'stock' && about !== 'image') {
-          const answered = await faq.tryAnswer(bot, phone, about, {
-            pack: bot.t,
-            convo: { ...convo, selected_product_id: byKeyword.id },
-          });
-          if (answered) {
-            await afterProductSelected(bot, phone, byKeyword);
-            return `answered_${about}_then_design`;
-          }
-        }
-        return handleFreeTextOrder(bot, phone, text, byKeyword);
-      }
-
       /**
        * "T-shirt chahiye" names a category, not a design. Show that
        * category's designs and let them choose - never pick for them.
@@ -1964,7 +2026,7 @@ async function handleMessage(bot, msg) {
        * A category the shop cannot sell today is refused here as it always
        * was, so the model naming a sold-out department changes nothing.
        */
-      const named = await categoryService.detect(text);
+      const named = null;
 
       if (named) {
         await sendWelcome(bot, phone, named.key);
@@ -2026,7 +2088,7 @@ async function handleMessage(bot, msg) {
       const shown = shownIds.map((id) => all.find((item) => item.id === id)).filter(Boolean);
       const products = shown.length ? shown : all;
 
-      let product = parser.detectProductChoice(text, products);
+      let product = parser.chooseByNumber(text, products);
 
       /**
        * "Red" while looking at a list of designs.
@@ -2046,7 +2108,7 @@ async function handleMessage(bot, msg) {
         const matches = [];
         for (const item of products) {
           const colours = await productService.colorsOf(item).catch(() => []);
-          if (parser.detectColorChoice(text, colours.filter((c) => c !== 'Default'))) {
+          if (parser.chooseByNumber(text, colours.filter((c) => c !== 'Default'))) {
             matches.push(item);
           }
         }
@@ -2057,23 +2119,6 @@ async function handleMessage(bot, msg) {
             action: `${text} -> ${product.design || product.name}`,
           });
         }
-      }
-
-      // Rules missed it - let the model try, but only to pick one of OUR
-      // products. Anything it returns that is not on this list is discarded.
-      /**
-       * Only when the combined call above did not run or returned nothing.
-       * It was shown this same list, so asking a second model call to pick
-       * from it is paying twice for one answer.
-       */
-      if (!product && !composed) {
-        const guess = await understand.pick({
-          phone,
-          text,
-          question: 'which product do you want?',
-          options: products.map((item) => item.name),
-        });
-        product = guess ? products.find((item) => item.name === guess) : null;
       }
 
       if (!product) {
@@ -2094,15 +2139,7 @@ async function handleMessage(bot, msg) {
         return 'restart_missing_product';
       }
       const colors = await productService.colorsOf(product);
-      let color = parser.detectColorChoice(text, colors);
-      if (!color) {
-        color = await understand.pick({
-          phone,
-          text,
-          question: `which colour, for a ${product.name}?`,
-          options: colors,
-        });
-      }
+      const color = parser.chooseByNumber(text, colors);
       if (!color) {
         return offScript(bot, phone, convo, text, {
           phase: 'choosing a colour',
@@ -2123,26 +2160,26 @@ async function handleMessage(bot, msg) {
       return handleDetails(bot, phone, convo, text);
 
     case STATES.ORDER_SUMMARY: {
-      if (parser.isYes(text)) return createOrderAndAskPayment(bot, phone, convo);
-
       /**
-       * The model may resolve "no" here but never "yes".
+       * Consent is read by the brain now, not by a word list.
        *
-       * A wrong "no" costs one extra question. A wrong "yes" places an order
-       * the customer never confirmed - address, stock reservation and all.
-       * Consent has to come from words we can point at, so an unclear reply
-       * gets the question asked again instead.
+       * This used to be `parser.isYes(text)` - thirty-four words, any one of
+       * which anywhere in the message placed the order. The comment that
+       * stood here said the model may resolve "no" but never "yes", and it
+       * was right about the danger: a wrong yes spends somebody's money on
+       * an order they never agreed to.
+       *
+       * What changed is where the safety lives, not whether it exists. A
+       * word list cannot tell "kar do" from "haan but size change karna hai"
+       * - both contain a yes word, and the second one is a customer asking
+       * for something else entirely. The brain reads the sentence; the
+       * backend still decides whether that reading may become an order, and
+       * checks the state, the draft and live stock before it does.
+       *
+       * Nothing reaches createOrderAndAskPayment from here any more. It is
+       * reached from execute.js, behind those gates.
        */
-      let declined = parser.isNo(text);
-      if (!declined && !parser.isYes(text)) {
-        declined =
-          (await understand.pick({
-            phone,
-            text,
-            question: 'do they want to correct their delivery details?',
-            options: ['correct the details', 'something else'],
-          })) === 'correct the details';
-      }
+      const declined = parser.isNo(text);
 
       if (declined) {
         await bot.sendMessage(phone, bot.t.askDetails());

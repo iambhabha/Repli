@@ -337,6 +337,24 @@ function detectProductByKeyword(text, products) {
 }
 
 /** Product chosen from the menu: number OR keyword. */
+/**
+ * "2" means the second thing on their screen.
+ *
+ * The one kind of reference that is not language. The shop printed a
+ * numbered list a moment ago and the customer answered with a position in
+ * it - there is nothing to interpret, no synonym to know, and no way for it
+ * to mean a different product tomorrow. That is why this survives when the
+ * spelling dictionaries do not: they guess what a word means, this reads an
+ * index the shop itself just wrote.
+ *
+ * @returns {*} the chosen item, or null
+ */
+function chooseByNumber(text, options) {
+  const list = options || [];
+  const index = parseMenuIndex(text, list.length);
+  return index ? list[index - 1] : null;
+}
+
 function detectProductChoice(text, products) {
   const index = parseMenuIndex(text, products.length);
   if (index) return products[index - 1];
@@ -542,6 +560,7 @@ module.exports = {
   parseMenuIndex,
   detectProductByKeyword,
   detectProductChoice,
+  chooseByNumber,
   detectColorByKeyword,
   detectColorChoice,
   detectSize,

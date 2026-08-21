@@ -77,6 +77,11 @@ async function answer(topic, { pack, convo }) {
       // honour.
       return product ? pack.priceFixedAnswer(product) : null;
 
+    case 'booking':
+      // Needs a chosen product, because the advance differs by item and a
+      // T-shirt's 500 quoted for a hoodie would be a wrong promise.
+      return product ? pack.bookingProcessAnswer(product) : null;
+
     case 'price':
       // No catalogue, no price. Silence here beats a made-up number.
       return product ? pack.priceAnswer(product) : null;

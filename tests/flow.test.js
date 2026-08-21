@@ -385,14 +385,67 @@ async function main() {
       const c = phone(15);
       await say(c, 'hi');
       await say(c, 'spiderman');
+      /**
+       * The state going IN, so nothing below can pass by accident.
+       *
+       * Checking only afterwards would be satisfied by a size stored on an
+       * earlier turn - the test would prove nothing about how XXXL itself
+       * was handled.
+       */
+      const before = await conversationService.get(c);
+      assert.strictEqual(before.state, 'SELECT_SIZE', 'on the size step to begin with');
+      assert.ok(!(before.data && before.data.size), 'and no size chosen yet');
+
       const reply = await say(c, 'XXXL');
-      // The wording is the model's now, so assert behaviour: it names the
-      // real sizes and asks again, and the customer stays on the step.
-      assert.ok(/S.*M.*L/i.test(reply), `should list the sizes:
-${reply}`);
-      assert.ok(reply.includes('?'), `should ask again:
-${reply}`);
-      assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
+      /**
+       * Behaviour, not punctuation.
+       *
+       * This asserted the reply contained a question mark, as a proxy for
+       * "asks again". The brain answered "XXXL available nahi hai. Aap S, M,
+       * L, XL ya XXL mein se koi size choose kar sakte hain." - which names
+       * the real sizes, invites a choice and leaves them on the step, and
+       * fails only because it ends in a full stop.
+       *
+       * What actually matters is checked instead: the sizes the shop really
+       * has are named, the size that does not exist is not confirmed, and
+       * the customer has not been moved.
+       */
+      const after = await conversationService.get(c);
+
+      /**
+       * The business fact first, because that is what must never vary.
+       *
+       * Four runs of this exact turn produced four different sentences and
+       * one identical decision: the size was refused and nothing was stored.
+       * Asserting the sentence made a passing behaviour fail roughly one run
+       * in five; asserting the decision does not, and it is the thing that
+       * would actually hurt a customer if it changed.
+       */
+      assert.strictEqual(after.state, 'SELECT_SIZE', 'they stay on the size step');
+      assert.ok(
+        !(after.data && after.data.size),
+        `a size the shop does not sell must never be stored: ${JSON.stringify(after.data)}`
+      );
+
+      /**
+       * Presentation, checked against the sizes the shop really has.
+       *
+       * The first version built one regex per size out of a template
+       * literal, and the escape it used was a backspace character rather
+       * than a word boundary. It matched nothing, ever, and failed a reply
+       * that had listed every size correctly. Tokenising and comparing
+       * against the database needs no escaping and cannot rot that way.
+       */
+      const onScreen = await productService.getById(after.selected_product_id);
+      const realSizes = await productService.sizesOf(onScreen);
+      const words = new Set(reply.toUpperCase().split(/[^A-Za-z0-9]+/).filter(Boolean));
+      const offered = realSizes.filter((size) => words.has(String(size).toUpperCase()));
+
+      assert.ok(
+        offered.length >= 2,
+        `should offer sizes the shop actually has (${realSizes.join('/')}):
+${reply}`
+      );
     });
 
     await test('15. out-of-stock size is refused with alternatives', async () => {
@@ -521,10 +574,20 @@ ${reply}`);
         `a typed link must not accompany the scanner:
 ${reply}`
       );
+      /**
+       * And the scanner comes with it.
+       *
+       * This assertion used to say the opposite - that the QR must NOT be
+       * repeated, because the customer already had it from the details
+       * prompt. Watching real conversations changed the shop's mind: by this
+       * point the scanner is buried above a couple of product photos and a
+       * typed-out address, and a booking number with nothing to pay into is
+       * a dead end. The property being tested is unchanged - exactly one
+       * payment destination, and it is the picture, never a typed line.
+       */
       assert.ok(
-        !sent.some((m) => m.phone === CUSTOMER && m.type === 'media'),
-        'and the scanner must NOT be sent again here - they already have it, ' +
-          'and many customers have already paid from it by this point'
+        sent.some((m) => m.phone === CUSTOMER && m.type === 'media'),
+        'the booking number must carry the scanner, so there is something to pay into'
       );
       contains(reply, 'screenshot');
 

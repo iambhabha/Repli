@@ -46,10 +46,20 @@ const SYSTEM = [
   '  English for English.',
   '- No greeting unless they greeted. No sign-off. No emoji spam.',
   '',
-  '- NEVER say something has already happened. You may ask and you may offer',
-  '  ("Book kar du?", "Kaunsa size chahiye?"), but never "aapne chun liya",',
+  '- NEVER say something has already happened. You may ask ("Kaunsa size',
+  '  chahiye?", "Kaunsa design dekhna hai?"), but never "aapne chun liya",',
   '  "you have selected", "photo bhej raha hoon", "order confirm ho gaya".',
   '  You are not the part of the shop that does those things.',
+  '',
+  '- NEVER offer to book, reserve or place an order. Not "book kar du?", not',
+  '  "confirm kar du?", not "order kar du?". You reached this point because',
+  '  the shop could not follow the message - which means the design, the',
+  '  colour or the size is still unsettled, and the price has not been said',
+  '  out loud yet. Offering to book there asks somebody to commit money to',
+  '  something nobody has described to them. This happened on a live',
+  '  conversation: a customer typed "Red" and was asked "Book kar du?" with',
+  '  no design chosen, no size asked and no price given.',
+  '  Ask for the missing thing instead.',
   '',
   'Reply with the message text only.',
 ].join('\n');
@@ -96,10 +106,25 @@ const CLAIMS_AN_ACTION = [
   /\bshare\s*(?:kar\s*)?(?:raha|rahi|diya|di|dunga)\b/i,
   /\battach\s*(?:kar\s*)?(?:diya|di|raha)\b/i,
 
-  // order / payment state, which only the database decides
-  /\border\s*(?:place|placed|ban gaya|ho gaya|confirm)/i,
-  /\bbooking\s*(?:confirm|ho gayi|ho gaya|done)\b/i,
-  /\bpayment\s*(?:mil gaya|receive|received|ho gaya|confirm)/i,
+  /**
+   * Order and payment state, which only the database decides.
+   *
+   * verb, and match only finished forms. "order confirm karne ke liye"
+   * is an instruction, not a claim; "order ... ho gaya" is a claim. The
+   * earlier versions demanded noun and verb touch, and a live reply walked
+   * through the gap: "Aapka order summary confirm ho gaya hai" - the one
+   * word "summary" was enough. It went to a customer with no order.
+   */
+  /\border\b[\w\s]{0,18}?\b(?:placed|ban gaya|ban gayi|ho gaya|ho gayi|kar liya|kar diya)/i,
+  /\bbooking\b[\w\s]{0,18}?\b(?:ho gayi|ho gaya|done|kar liya|kar di)/i,
+  /\bpayment\b[\w\s]{0,18}?\b(?:mil gaya|received|ho gaya|ho gayi|kar liya)/i,
+
+  /**
+   * And the completion itself, whatever noun it is attached to. "confirm ho
+   * gaya" reports a finished thing regardless of what precedes it, so the
+   * list above is a convenience rather than the real test.
+   */
+  /\b(?:confirm|complete|process|register|note)\w*\s*ho\s*(?:gaya|gayi|gaye|gye|chuka|chuki)\b/i,
   /\bpaisa\s*(?:mil gaya|aa gaya)\b/i,
   /\b(?:add|added)\s+to\s+(?:your\s+)?(?:cart|order)\b/i,
 ];

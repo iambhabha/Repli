@@ -864,6 +864,24 @@ Please hold on 🙏`,
 {{remaining}} remaining once it's ready.`,
   },
   {
+    key: 'bookingProcessAnswer',
+    category: 'faq',
+    label: 'How do I book? / what is the process?',
+    description:
+      'Customer has chosen and wants to know what happens next. The three steps, in order, with the shop’s own numbers.',
+    placeholders: ['item', 'booking', 'remaining'],
+    hi: `{{item}} book karne ke liye {{booking}} advance dena hota hai — isse aapka size reserve ho jata hai.
+
+Scanner par {{booking}} bhejiye, phir uska screenshot yahan bhej dijiye. Screenshot check hone ke baad hi booking pakki hoti hai.
+
+Baaki {{remaining}} tab, jab piece ban kar ready ho jaye.`,
+    en: `To book the {{item}} there’s a {{booking}} advance — that reserves your size.
+
+Pay {{booking}} on the scanner, then send the screenshot here. The booking is confirmed only once that screenshot is checked.
+
+The remaining {{remaining}} is paid when the piece is ready.`,
+  },
+  {
     key: 'refundAnswer',
     category: 'faq',
     label: 'Refund / return / exchange asked',

@@ -11,6 +11,7 @@
 const assert = require('assert');
 const { verify } = require('../src/ai/humanise');
 const cost = require('../src/ai/cost');
+const brain = require('../src/ai/brain');
 const proof = require('../src/ai/proof');
 const parser = require('../src/bot/parser');
 
@@ -331,6 +332,181 @@ check('a question at the name step falls through to be answered', () => {
     'payment kaha karu', 'venom dikhao', 'kya price hai']) {
     assert.ok(!nameValidator(asked), `must reach the model, not the form: ${asked}`);
   }
+});
+
+
+console.log('\n- the brain cannot act on what it did not earn -\n');
+
+const LISTS = {
+  categories: ['tshirt', 'hoodie'],
+  designs: ['Spider-Man', 'Venom'],
+  colours: ['Red', 'Black'],
+  sizes: ['S', 'M', 'L', 'XL', 'XXL'],
+  facts: 'Spider-Man 2499. Venom 2499. Booking 500.',
+};
+const decides = (raw) =>
+  brain.validate(typeof raw === 'string' ? raw : JSON.stringify(raw), LISTS);
+
+const GOOD = {
+  intent: 'pick_size',
+  decision: 'select_size',
+  confidence: 1,
+  language: 'hi',
+  product: 'Spider-Man',
+  size: 'L',
+};
+
+check('a decision naming only real things is accepted', () => {
+  const out = decides(GOOD);
+  assert.ok(out.value, out.reason);
+  assert.strictEqual(out.value.selection.product, 'Spider-Man');
+  assert.strictEqual(out.value.selection.size, 'L');
+});
+
+check('malformed output decides nothing', () => {
+  /**
+   * Every one of these is a turn where the shop must fall back rather than
+   * act. None of them may produce a decision object.
+   */
+  for (const raw of ['not json', '[]', 'null', '{"decision":', '']) {
+    assert.ok(decides(raw).reason, `should be refused: ${JSON.stringify(raw)}`);
+  }
+});
+
+check('a decision the backend cannot execute is refused', () => {
+  assert.ok(decides({ ...GOOD, decision: 'refund_everything' }).reason);
+  assert.ok(decides({ ...GOOD, intent: 'do_a_backflip' }).reason);
+  assert.ok(decides({ ...GOOD, confidence: 7 }).reason);
+});
+
+check('a product, colour or size the shop does not have sinks the whole decision', () => {
+  /**
+   * Not repaired, not partially kept. A model that named a size the shop
+   * does not stock was guessing, and the rest of what it said is not more
+   * trustworthy for being well formed.
+   */
+  assert.ok(decides({ ...GOOD, product: 'Batman' }).reason, 'unknown design');
+  assert.ok(decides({ ...GOOD, colour: 'Turquoise' }).reason, 'unknown colour');
+  assert.ok(decides({ ...GOOD, size: 'XXXL' }).reason, 'unknown size');
+  assert.ok(decides({ ...GOOD, category: 'furniture' }).reason, 'unknown department');
+});
+
+check('saying it needs to ask, without asking, is refused', () => {
+  assert.ok(decides({ ...GOOD, needsClarification: true, clarification: '' }).reason);
+  const asked = decides({ ...GOOD, needsClarification: true, clarification: 'Kaunsa design?' });
+  assert.ok(asked.value, asked.reason);
+  assert.strictEqual(asked.value.decision, 'clarify', 'an unsure decision becomes a question');
+});
+
+check('a quantity outside what the lot allows is refused', () => {
+  assert.ok(decides({ ...GOOD, quantity: 0 }).reason);
+  assert.ok(decides({ ...GOOD, quantity: 500 }).reason);
+  assert.ok(decides({ ...GOOD, quantity: 1.5 }).reason);
+  assert.strictEqual(decides({ ...GOOD, quantity: 2 }).value.selection.quantity, 2);
+});
+
+check('naming a design turns a browse into a selection', () => {
+  /**
+   * "venom" came back as show_products WITH the design named - browse the
+   * department, and here is the exact thing they asked for. Acted on, it
+   * put the customer back at the list they had just chosen from.
+   */
+  /**
+   * Written with a browsing intent, because that is the case: somebody
+   * asking to see a department who names a design in the same breath. The
+   * fixture used to carry intent pick_size and a size, which a later rule
+   * correctly reads as a size selection - a collision between two fixtures,
+   * not between two rules.
+   */
+  const out = decides({
+    intent: 'browse',
+    decision: 'show_products',
+    confidence: 1,
+    language: 'hi',
+    category: 'tshirt',
+    product: 'Venom',
+  });
+  assert.strictEqual(out.value.decision, 'select_product');
+});
+
+check('words the shop cannot back up never reach a customer', () => {
+  const invented = decides({ ...GOOD, decision: 'reply', reply: 'Haan bhai, 899 me de dunga.' });
+  assert.ok(invented.reason, 'a price not in the facts must sink the decision');
+  const linked = decides({ ...GOOD, decision: 'reply', reply: 'Pay at https://example.com' });
+  assert.ok(linked.reason, 'a link must sink the decision');
+});
+
+
+console.log('\n- consent is read, not matched -\n');
+
+const onSummary = (raw) =>
+  brain.validate(JSON.stringify({ confidence: 1, language: 'hi', ...raw }), LISTS);
+
+check('a decision to confirm survives validation', () => {
+  const out = onSummary({ intent: 'confirm', decision: 'confirm_order' });
+  assert.ok(out.value, out.reason);
+  assert.strictEqual(out.value.decision, 'confirm_order');
+});
+
+check('declining is a decision of its own, not a failed yes', () => {
+  const out = onSummary({ intent: 'cancel', decision: 'decline_order' });
+  assert.ok(out.value, out.reason);
+  assert.strictEqual(out.value.decision, 'decline_order');
+});
+
+check('an unsure confirmation becomes a question', () => {
+  /**
+   * The one that a word list cannot get right: "haan but size change karna
+   * hai" contains a yes and is not one. Whatever the brain makes of it, an
+   * unsure reading must never arrive as confirm_order.
+   */
+  const out = onSummary({
+    intent: 'confirm',
+    decision: 'confirm_order',
+    needsClarification: true,
+    clarification: 'Size badalna hai ya yahi confirm kar du?',
+  });
+  assert.strictEqual(out.value.decision, 'clarify');
+});
+
+check('the executor, not the brain, owns the order', () => {
+  /**
+   * The brain may ask for a confirmation. Whether that becomes an order is
+   * decided by code that checks the state, the draft and live stock - and
+   * none of it is reachable from the decision itself.
+   */
+  const fs = require('fs');
+  const path = require('path');
+  const executor = fs.readFileSync(path.join(__dirname, '..', 'src', 'bot', 'execute.js'), 'utf8');
+
+  const gate = executor.slice(
+    executor.indexOf("case 'confirm_order'"),
+    executor.indexOf("case 'decline_order'")
+  );
+  assert.ok(/STATES\.ORDER_SUMMARY/.test(gate), 'the summary must be on screen');
+  assert.ok(/buildDraft/.test(gate), 'the draft must be complete');
+  assert.ok(/return null/.test(gate), 'a failed gate must mean no order');
+
+  assert.ok(
+    !/orderService|supabase|confirm_order_payment/.test(executor),
+    'the executor must not reach the order or payment tables itself'
+  );
+});
+
+check('the purchase path no longer reads a word list', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const flow = fs.readFileSync(path.join(__dirname, '..', 'src', 'bot', 'stateMachine.js'), 'utf8');
+  const summary = flow.slice(
+    flow.lastIndexOf('case STATES.ORDER_SUMMARY: {'),
+    flow.lastIndexOf('case STATES.WAITING_FOR_PAYMENT')
+  );
+  const code = summary.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  assert.ok(!/parser\.isYes/.test(code), 'consent must not come from YES_WORDS');
+  assert.ok(
+    !/createOrderAndAskPayment/.test(code),
+    'the order must be created behind the executor gates, not here'
+  );
 });
 
 

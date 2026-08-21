@@ -1,0 +1,362 @@
+@import 'tailwindcss';
+
+/**
+ * One palette, two grounds.
+ *
+ * Every colour on the page is a role, not a value: background, foreground,
+ * rule, plate. Switching theme swaps the six values below and nothing else
+ * in the site has to know it happened - no component names a colour twice,
+ * and there is no `dark:` variant anywhere.
+ *
+ * `--s-flip` is the pair that runs the other way. The booking section is
+ * deliberately the opposite ground to whatever surrounds it, because that
+ * turn is what stops a long page reading as one flat sheet. Defining it as
+ * its own pair means the turn survives the switch instead of inverting into
+ * an identical block.
+ */
+:root {
+  --s-bg: #0b0b0b;
+  --s-fg: #f1efe9;
+  --s-mid: #cfcac0;
+  --s-dim: #8e8a83;
+  --s-line: #2a2a2a;
+  --s-plate: #141414;
+  --s-raised: #262626;
+  --s-ghost: #242424;
+  --s-ghost-ink: #3a3a3a;
+  --s-flip-bg: #f1efe9;
+  --s-flip-fg: #0b0b0b;
+  --s-hot: #ff1f6b;
+  --s-glow-core: #ffe0a3;
+  --s-glow-mid: #ff9d24;
+  --s-glow-far: #ff6a00;
+
+  color-scheme: dark;
+}
+
+/**
+ * The light ground is warm, not white.
+ *
+ * A pure #fff page under these photographs looks like a spec document. The
+ * paper tone is the one already used for the booking section, so the two
+ * themes are the same two sheets of paper in a different order.
+ *
+ * The magenta darkens here. #ff1f6b is a marker on black and a smear on
+ * paper, and the labels set in it are small.
+ */
+:root[data-theme='light'] {
+  --s-bg: #f1efe9;
+  --s-fg: #0b0b0b;
+  --s-mid: #3b3833;
+  --s-dim: #6c675f;
+  --s-line: #d6d1c7;
+  --s-plate: #e5e1d8;
+  --s-raised: #ffffff;
+  --s-ghost: #d8d3c8;
+  --s-ghost-ink: #bdb7aa;
+  --s-flip-bg: #0b0b0b;
+  --s-flip-fg: #f1efe9;
+  --s-hot: #d1004e;
+  --s-glow-core: #ffb020;
+  --s-glow-mid: #ff8000;
+  --s-glow-far: #d94f00;
+
+  color-scheme: light;
+}
+
+/** Somebody who has never touched the switch gets what their system asks for. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --s-bg: #f1efe9;
+    --s-fg: #0b0b0b;
+    --s-mid: #3b3833;
+    --s-dim: #6c675f;
+    --s-line: #d6d1c7;
+    --s-plate: #e5e1d8;
+    --s-raised: #ffffff;
+    --s-ghost: #d8d3c8;
+    --s-ghost-ink: #bdb7aa;
+    --s-flip-bg: #0b0b0b;
+    --s-flip-fg: #f1efe9;
+    --s-hot: #d1004e;
+    --s-glow-core: #ffb020;
+    --s-glow-mid: #ff8000;
+    --s-glow-far: #d94f00;
+
+    color-scheme: light;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--s-bg);
+  --color-fg: var(--s-fg);
+  --color-mid: var(--s-mid);
+  --color-dim: var(--s-dim);
+  --color-line: var(--s-line);
+  --color-plate: var(--s-plate);
+  --color-ghost: var(--s-ghost);
+  --color-ghostink: var(--s-ghost-ink);
+  --color-flip: var(--s-flip-bg);
+  --color-flipfg: var(--s-flip-fg);
+  --color-hot: var(--s-hot);
+
+  /**
+   * The names shadcn components expect, pointed at the roles above.
+   *
+   * Components copied in from a library reach for --color-border,
+   * --color-muted, --color-card and so on, and utilities like bg-muted or
+   * ring-ring resolve through the same names. Mapping them here is what
+   * makes a dropped-in control wear this shop's palette instead of the
+   * neutral grey it was designed against - and it means those components
+   * follow the theme switch without knowing the switch exists.
+   */
+  --color-background: var(--s-bg);
+  --color-foreground: var(--s-fg);
+  --color-card: var(--s-raised);
+  --color-card-foreground: var(--s-fg);
+  --color-popover: var(--s-plate);
+  --color-popover-foreground: var(--s-fg);
+  --color-muted: var(--s-plate);
+  --color-muted-foreground: var(--s-dim);
+  --color-accent: var(--s-plate);
+  --color-accent-foreground: var(--s-fg);
+  --color-secondary: var(--s-plate);
+  --color-secondary-foreground: var(--s-fg);
+  --color-primary: var(--s-hot);
+  --color-primary-foreground: var(--s-bg);
+  --color-destructive: #e5484d;
+  --color-destructive-foreground: var(--s-bg);
+  --color-border: var(--s-line);
+  --color-input: var(--s-line);
+  --color-ring: var(--s-hot);
+
+  --font-display: var(--font-display), 'Arial Narrow', sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, 'Courier New', monospace;
+}
+
+/**
+ * The theme wipe.
+ *
+ * The browser gives us two live pictures during a view transition: the page
+ * as it was, and the page as it now is. The default is to cross-fade them,
+ * which on a full-page colour change reads as a grey wash with unreadable
+ * type in the middle of it.
+ *
+ * Instead the old picture is left alone, sitting still and fully legible,
+ * and the new one is revealed through a circle growing from the point that
+ * was pressed. Both pictures carry their own text, so the headline, the
+ * prices and the labels are readable for every frame of it - the same page,
+ * in the other ground, arriving.
+ *
+ * The circle's origin and radius are written onto the root by ThemeSweep
+ * just before the transition starts.
+ */
+::view-transition-old(root) {
+  animation: none;
+}
+
+::view-transition-new(root) {
+  animation: theme-wipe 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* Above the old picture, or there is nothing to reveal. */
+  z-index: 1;
+}
+
+/* Neither picture should tint the other while both are on screen. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+}
+
+@keyframes theme-wipe {
+  from {
+    clip-path: circle(0 at var(--sweep-x, 50%) var(--sweep-y, 50%));
+  }
+  to {
+    clip-path: circle(var(--sweep-r, 150vmax) at var(--sweep-x, 50%) var(--sweep-y, 50%));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--s-bg);
+  color: var(--s-fg);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+}
+
+/**
+ * Poster type: as large as the box allows, packed tight, no exceptions.
+ *
+ * Anton is already condensed and heavy, so the only work left is closing the
+ * leading up until the lines lock together the way they do on a flyer.
+ */
+.poster {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 0.82;
+  /*
+   * Tracked in, to sit with the mark.
+   *
+   * The wordmark at the foot of the page had its letter spacing closed until
+   * the gaps were a tenth of a letter's width, and the poster type beside it
+   * was still set at the face's own default - so the two halves of the same
+   * page were spaced differently and read as two different hands.
+   *
+   * Negative tracking is also simply correct at this size. Every face is
+   * drawn with sidebearings that suit running text; left alone at 200px they
+   * open into holes. The number is small because Anton is already condensed
+   * - past about -0.04em its verticals start to touch.
+   */
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+/**
+ * The mark at the foot answers one letter at a time.
+ *
+ * Each letter is already its own group - they had to be, so the spacing
+ * between them could be closed - which means each can take the pointer on
+ * its own. Running along the word hands the light from one letter to the
+ * next; the rest stay where they are.
+ *
+ * The hover is read on `.mark-hit`, which never moves, and applied to
+ * `.mark-letter` inside it, which does. That separation is the whole reason
+ * this is stable: with the target on the moving element, lifting a letter
+ * pulled its own bottom edge up past the cursor, the hover was lost, the
+ * letter dropped back under the cursor, and it picked the hover up again -
+ * several times a second. It looked like the letter was shaking. Nothing
+ * about the animation was wrong; the element was moving out from under the
+ * thing that was triggering it.
+ *
+ * This lives on the mark and nowhere else. It was on the headings first,
+ * where brushing any part of a word lit the whole word at once, and a
+ * headline that glows while you are trying to read the sentence under it is
+ * an effect getting in the way of the page. Down here there is nothing to
+ * read and nothing to click.
+ *
+ * transform-box: fill-box is what makes the growth land where it should.
+ * Without it a transform on an SVG child is measured against the whole
+ * viewBox, so the letter scales about the corner of the artboard and flies
+ * off sideways instead of growing where it stands.
+ *
+ * A filter, not a text-shadow: these are paths, not type. drop-shadow
+ * follows the outline of the glyph, and because its lengths are in the
+ * mark's own units the glow scales with the mark rather than staying a fixed
+ * number of pixels at every size.
+ */
+.mark-letter {
+  transform-box: fill-box;
+  transform-origin: center;
+  /*
+   * The resting state is the same three shadows at nothing, rather than
+   * `filter: none`.
+   *
+   * Going from none to a list of drop-shadows, the browser has to invent a
+   * starting value, and it invents a transparent shadow with no blur - so
+   * the first frames of the glow are spent being nothing at all. Naming the
+   * zero state explicitly gives the transition two ends of the same shape
+   * and it interpolates cleanly from the first frame.
+   */
+  filter:
+    drop-shadow(0 0 0 transparent)
+    drop-shadow(0 0 0 transparent)
+    drop-shadow(0 0 0 transparent);
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1.35),
+    filter 240ms ease-out;
+}
+
+.mark-hit:hover .mark-letter {
+  /* Up as well as out - a letter that only grows looks like a rendering
+     glitch, one that lifts looks picked up. */
+  transform: translateY(-5%) scale(1.14);
+  /*
+   * Warm, and strong, because the mark it is lighting is not.
+   *
+   * Three tones rather than one colour at three opacities: pale gold tight
+   * against the glyph, amber around that, orange carrying out into the
+   * ground. That is how a light actually falls off, and it is the difference
+   * between a letter that looks lit and a letter with a coloured outline.
+   *
+   * The wordmark is painted in the ghost tone - a shade off the background
+   * on purpose - so a glow pitched for ordinary text vanished into it. These
+   * are near full strength at the edge.
+   */
+  filter:
+    drop-shadow(0 0 2px var(--s-glow-core))
+    drop-shadow(0 0 9px color-mix(in srgb, var(--s-glow-mid) 85%, transparent))
+    drop-shadow(0 0 26px color-mix(in srgb, var(--s-glow-far) 50%, transparent));
+}
+
+/* A pointer is required. On a touch screen :hover sticks after a tap. */
+@media (hover: none) {
+  .mark-hit:hover .mark-letter {
+    transform: none;
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark-letter {
+    transition: none;
+  }
+  .mark-hit:hover .mark-letter {
+    transform: none;
+  }
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/**
+ * The strip that runs across the page.
+ *
+ * Duplicated in the markup rather than cloned in script, so it loops without
+ * a seam and without a hydration step. Paused for anyone who has asked the
+ * system for less motion.
+ */
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker-track {
+  animation: ticker 38s linear infinite;
+  will-change: transform;
+}
+
+/** A hard diagonal rule, the one mark the shop's own artwork uses. */
+.hatch {
+  background-image: repeating-linear-gradient(
+    115deg,
+    currentColor 0 2px,
+    transparent 2px 7px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .ticker-track {
+    animation: none;
+  }
+}

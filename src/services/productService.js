@@ -139,6 +139,15 @@ async function findVariant(productId, color, size) {
   );
 }
 
+/**
+ * What a made-to-order product reports instead of a count.
+ *
+ * Large enough that no real order is refused, finite so that arithmetic on
+ * it stays arithmetic - "available - quantity" must not become NaN or
+ * Infinity somewhere downstream.
+ */
+const MADE_TO_ORDER_STOCK = 9999;
+
 async function getVariantById(variantId) {
   if (!variantId) return null;
   const products = await catalogue();
@@ -149,8 +158,25 @@ async function getVariantById(variantId) {
   return null;
 }
 
-/** Available quantity. No variant row means zero - stock is never invented. */
+/**
+ * Available quantity. No variant row means zero - stock is never invented.
+ *
+ * Except where the shop does not keep stock at all. The bag is sold off a
+ * printed colour chart in twenty-four colours and the owner does not count
+ * them; whether a colour can be had is something they confirm with their
+ * supplier after the customer picks one. Those rows sit at zero because
+ * nobody has ever had a reason to type a number into them, and reading that
+ * zero as "sold out" turned a customer choosing red into "Sorry bhai" for a
+ * bag the shop would happily have sold.
+ *
+ * made_to_order is the column that says so, and it is already what the
+ * category listing and the size lists go by. This makes the third reader
+ * agree with the other two rather than inventing a fourth rule.
+ */
 async function stockOf(productId, color, size) {
+  const product = await getById(productId);
+  if (product && product.made_to_order) return MADE_TO_ORDER_STOCK;
+
   const variant = await findVariant(productId, color, size);
   if (!variant) return 0;
   const qty = Number(variant.stock_quantity);
@@ -169,11 +195,12 @@ async function availableSizes(productId, color) {
   );
 }
 
-/** Colours with stock in at least one size. */
+/** Colours with stock in at least one size - all of them, when made to order. */
 async function availableColors(productId) {
   const rows = await variantsOf(productId);
   const product = await getById(productId);
   const colors = product ? await colorsOf(product) : [];
+  if (product && product.made_to_order) return colors;
   return colors.filter((color) =>
     rows.some((v) => colourKey(v.color) === colourKey(color) && v.stock_quantity > 0)
   );

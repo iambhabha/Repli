@@ -110,6 +110,23 @@ function createPack(language) {
         remaining: money(Number(product.price || 0) - Number(product.booking_amount || 0)),
       }),
 
+    /**
+     * "book karni hai to karna kya hoga" - the three steps, in order.
+     *
+     * A live customer asked this after choosing a size and got nothing: the
+     * shop had a stored answer for the price, the wait and the material, but
+     * none for its own booking process, so the question fell through to free
+     * prose. The steps are the ones in the sales memory - advance, scanner,
+     * screenshot, balance on completion - and the figures come from the
+     * product, so a hoodie quotes a hoodie's advance.
+     */
+    bookingProcessAnswer: (product) =>
+      t('bookingProcessAnswer', {
+        item: product.design || product.name,
+        booking: money(product.booking_amount),
+        remaining: money(Number(product.price || 0) - Number(product.booking_amount || 0)),
+      }),
+
     refundAnswer: () => t('refundAnswer', {}),
 
     priceFixedAnswer: (product) =>

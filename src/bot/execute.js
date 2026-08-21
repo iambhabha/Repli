@@ -67,7 +67,11 @@ function createExecutor(handlers) {
     goToDetails,
     goToHuman,
     cancelOrder,
-    freeTextOrder,
+    applySize,
+    applyQuantity,
+    editDetails,
+    buildDraft,
+    createOrder,
   } = handlers;
 
   /**
@@ -136,6 +140,23 @@ function createExecutor(handlers) {
          * Leaving a chosen design IS a switch, so it goes through the path
          * that asks first. Declining here hands the message to it.
          */
+        /**
+         * A colour cannot choose a department.
+         *
+         * "Red" came back as browse-the-hoodies, with a colour and a
+         * category the customer never named - and Red is not even a hoodie
+         * colour. Acted on, it answered a one-word message with the wrong
+         * department's menu, which is the bug this whole refactor was
+         * started for.
+         *
+         * Declining sends it to the flow, which asks which design they mean.
+         * That is the honest answer to a genuinely ambiguous word.
+         */
+        if (selection.colour && !selection.product && !convo.selected_product_id) {
+          logger.info('brain.refused', { phone, action: 'category inferred from a colour' });
+          return null;
+        }
+
         const midSelection =
           Boolean(convo.selected_product_id) &&
           (convo.state === STATES.SELECT_COLOR ||
@@ -166,16 +187,61 @@ function createExecutor(handlers) {
        * Venom's photo lookup a Spider-Man variant.
        */
       case 'show_image': {
-        if (!subject) return null;
-        const owns = convo.selected_product_id === subject.id ? convo : null;
-        await sendProductImage(bot, phone, subject, owns, decision.imageKind);
-        act(subject.design || subject.name);
+        /**
+         * "bag ki images dena" names a department, not a design.
+         *
+         * The brain identified the department and left product null, which
+         * left this with nothing to photograph - so the shop asked "kaunse
+         * ki photo chahiye?" about a department that sells one thing.
+         *
+         * The database settles it: if that department has exactly one
+         * product, there is no ambiguity to ask about. More than one and
+         * this declines, and the flow asks which - because then the question
+         * is a real one.
+         */
+        let wanted = subject;
+        if (!wanted && selection.category) {
+          const inCategory = (await productService.activeProducts()).filter(
+            (item) => item.category === selection.category
+          );
+          if (inCategory.length === 1) [wanted] = inCategory;
+        }
+        if (!wanted) return null;
+        const subjectForImage = wanted;
+        const owns = convo.selected_product_id === subjectForImage.id ? convo : null;
+        await sendProductImage(bot, phone, subjectForImage, owns, decision.imageKind);
+        act(subjectForImage.design || subjectForImage.name);
         return 'brain_image';
       }
 
       case 'select_product': {
         if (!named) return null;
         if (named.id === convo.selected_product_id) return null;
+
+        /**
+         * Not once they are past choosing.
+         *
+         * A customer half way through typing their address asked for the
+         * black one's photo - "black wali bhi dena please" - and it was read
+         * as picking the Venom. Selecting it cleared their cart and dropped
+         * them back at the size question, mid-order, for asking to see
+         * something.
+         *
+         * show_products has had this guard since the same thing happened
+         * with a department; this is the same rule for a design. Naming
+         * something while committed is a request to LOOK, or at most a
+         * switch that has to be confirmed - it is never a silent restart.
+         * Declining hands it to the flow, which asks.
+         */
+        const committed =
+          convo.state === STATES.COLLECT_DETAILS ||
+          convo.state === STATES.ORDER_SUMMARY ||
+          convo.state === STATES.WAITING_FOR_PAYMENT ||
+          convo.state === STATES.PAYMENT_VERIFYING;
+        if (committed) {
+          logger.info('brain.refused', { phone, action: 'design change mid-order' });
+          return null;
+        }
 
         /**
          * A design and a size in the same breath.
@@ -191,8 +257,23 @@ function createExecutor(handlers) {
          * stock. The brain naming a size does not make it available.
          */
         if (selection.size) {
-          act(`${named.design || named.name} ${selection.size}`);
-          return freeTextOrder(bot, phone, `${text} ${selection.size}`, named);
+          /**
+           * The decision is executed, not re-read.
+           *
+           * This used to hand the sentence back to a free-text parser with
+           * the size appended - a second interpretation of a message the
+           * brain had already understood, and the exact shape of "two
+           * brains" this refactor exists to remove. The product is selected,
+           * the colour settles itself, and the size is applied from the
+           * decision.
+           */
+          const sizes = await productService.sizesOf(named).catch(() => []);
+          if (sizes.includes(selection.size)) {
+            await afterProductSelected(bot, phone, named, { quiet: true });
+            const ready = await conversationService.get(phone);
+            act(`${named.design || named.name} ${selection.size}`);
+            return applySize(bot, phone, ready, named, selection.size);
+          }
         }
 
         await conversationService.save(
@@ -202,6 +283,24 @@ function createExecutor(handlers) {
             selected_product_id: named.id,
           })
         );
+
+        /**
+         * A design and a colour in one message.
+         *
+         * "black wala" after the bags were shown names both the backpack and
+         * the colour, and selecting only the design asked which colour they
+         * wanted - the word they had just used. Checked against the colours
+         * this design really has, because the brain is shown every colour in
+         * the shop.
+         */
+        if (selection.colour) {
+          const colours = await productService.colorsOf(named).catch(() => []);
+          if (colours.includes(selection.colour)) {
+            act(`${named.design || named.name} ${selection.colour}`);
+            return afterColorSelected(bot, phone, named, selection.colour);
+          }
+        }
+
         act(named.design || named.name);
         return afterProductSelected(bot, phone, named);
       }
@@ -241,12 +340,131 @@ function createExecutor(handlers) {
           );
         }
         act(`${subject.design || subject.name} ${selection.colour}`);
-        return afterColorSelected(bot, phone, subject, selection.colour);
+        /**
+         * The size question is suppressed when a size is coming with it, so
+         * the customer is not asked something they answered in the same
+         * message. Checked against the real sizes first - a size the shop
+         * does not have must still produce the question.
+         */
+        const sizesHere = await productService.sizesOf(subject).catch(() => []);
+        const sizeFollows = Boolean(selection.size && sizesHere.includes(selection.size));
+
+        const afterColour = await afterColorSelected(bot, phone, subject, selection.colour, {
+          quiet: sizeFollows,
+        });
+
+        /**
+         * A colour and a size in one message.
+         *
+         * "red wala L" identified both, and applying only the colour asked
+         * the customer for a size they had just given. The colour has to
+         * land first - it decides which sizes are even in stock - so the
+         * conversation is re-read before the size is applied to it.
+         *
+         * Only when the colour step actually succeeded. An out-of-stock
+         * colour has already been answered, and stacking a size question on
+         * top of that would be answering a question nobody asked.
+         */
+        if (sizeFollows && afterColour !== 'out_of_stock') {
+          const withColour = await conversationService.get(phone);
+          act(`${subject.design || subject.name} ${selection.colour} ${selection.size}`);
+          return applySize(bot, phone, withColour, subject, selection.size);
+        }
+
+        return afterColour;
       }
 
       /**
-       * Deliberately absent: select_size, select_quantity, collect_details,
-       * confirm_order.
+       * A size the brain resolved, checked against stock before it counts.
+       *
+       * The decision is executed, not re-read: applySize() is handed the
+       * size itself rather than the sentence, so there is no second parse to
+       * disagree with the first. What it does NOT skip is the check - stock
+       * is read live and an unavailable size is refused with the ones that
+       * remain, exactly as when a customer types a bare "L".
+       */
+      case 'select_size': {
+        if (!subject || !selection.size) return null;
+
+        const sizes = await productService.sizesOf(subject).catch(() => []);
+        if (!sizes.includes(selection.size)) return null;
+
+        // Only for the design they are actually on. A size for something
+        // they have not chosen is a decision missing its subject.
+        if (!convo.selected_product_id || subject.id !== convo.selected_product_id) return null;
+
+        act(`${subject.design || subject.name} ${selection.size}`);
+        return applySize(bot, phone, convo, subject, selection.size);
+      }
+
+      /**
+       * How many, checked against the lot before it counts.
+       *
+       * The cap and live stock are read here, not taken from the decision -
+       * the brain naming a number does not make that many pieces exist.
+       */
+      case 'select_quantity': {
+        if (!subject || !selection.quantity) return null;
+        if (!convo.selected_product_id || subject.id !== convo.selected_product_id) return null;
+        act(`${subject.design || subject.name} x${selection.quantity}`);
+        return applyQuantity(bot, phone, convo, subject, selection.quantity);
+      }
+
+      /**
+       * "nahi, address galat hai" on the order summary.
+       *
+       * Only where a summary is actually on screen. Anywhere else this would
+       * wipe a draft the customer is part-way through typing.
+       */
+      case 'edit_details': {
+        if (convo.state !== STATES.ORDER_SUMMARY) return null;
+        act();
+        return editDetails(bot, phone, convo);
+      }
+
+      /**
+       * They agreed to the summary.
+       *
+       * The brain REQUESTS this; it does not place the order. Every gate
+       * that stood behind parser.isYes still stands here, in the same
+       * order, and any one of them failing means no order:
+       *
+       *   the summary must actually be on screen
+       *   buildDraft must produce a complete draft
+       *   createOrderAndAskPayment re-reads live stock before writing
+       *
+       * The words that got us here are the brain's reading of a sentence.
+       * Whether that reading may become an order is the backend's.
+       */
+      case 'confirm_order': {
+        if (convo.state !== STATES.ORDER_SUMMARY) {
+          logger.info('brain.refused', { phone, action: 'confirm outside the summary' });
+          return null;
+        }
+        const draft = await buildDraft(convo);
+        if (!draft) {
+          logger.info('brain.refused', { phone, action: 'confirm on an incomplete draft' });
+          return null;
+        }
+        act();
+        return createOrder(bot, phone, convo);
+      }
+
+      /**
+       * They do not want it as it stands.
+       *
+       * Nothing is cancelled and nothing is deleted - the order does not
+       * exist yet. They are taken back to the details, which is where the
+       * refusal was already handled.
+       */
+      case 'decline_order': {
+        if (convo.state !== STATES.ORDER_SUMMARY) return null;
+        act();
+        return editDetails(bot, phone, convo);
+      }
+
+      /**
+       * Deliberately absent: collect_details.
        *
        * Each of those is a step towards spending money, and each already has
        * a handler that checks stock, quantity and consent in the order the
