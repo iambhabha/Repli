@@ -943,6 +943,33 @@ async function tryBrowseWhilePaying(bot, phone, text, order, { remind = true } =
 
 /** Product chosen -> ask colour, or skip when there is only one. */
 async function afterProductSelected(bot, phone, product, extra = {}) {
+  /**
+   * A department sold off a document asks for the colour from the document.
+   *
+   * The hoodies have about forty camo patterns with no names, so there is no
+   * list to offer and nothing to match a typed colour against. One numbered
+   * PDF goes out instead and the customer answers with a number or a
+   * screenshot - see chooseFromChart.
+   *
+   * Checked before the colour list, because a product in one of these
+   * departments has no real colours on it at all: without this the hoodies
+   * fell through to "one colour, nothing to ask" and went straight to size,
+   * which is how they were sold for weeks with nobody ever choosing one.
+   */
+  const chart = await productService.chartFor(product);
+  if (chart) {
+    await bot.sendImage(phone, chart, '');
+    await bot.sendMessage(phone, bot.t.chooseFromChart(product), { raw: true });
+    await conversationService.save(
+      phone,
+      conversationService.clearedCart({
+        state: STATES.SELECT_COLOR,
+        selected_product_id: product.id,
+      })
+    );
+    return 'chart_sent';
+  }
+
   const colors = await productService.colorsOf(product);
 
   // One colour, or none at all (hoodies are ordered by size only). Either
@@ -966,8 +993,8 @@ async function afterProductSelected(bot, phone, product, extra = {}) {
    * from there. scripts/mark-bag-colours.js still builds them if that is
    * ever revisited.
    */
-  const chart = (await productService.imagesFor(product).catch(() => []))[0] || null;
-  if (chart) await bot.sendImage(phone, chart, '');
+  const card = (await productService.imagesFor(product).catch(() => []))[0] || null;
+  if (card) await bot.sendImage(phone, card, '');
 
   /**
    * Raw for the same reason as chartReceived: the instruction IS the
@@ -1595,6 +1622,34 @@ async function applySize(bot, phone, convo, product, size) {
 }
 
 /**
+ * Record a colour picked by its number on the chart, and carry on.
+ *
+ * Stored as "Chart #17" rather than as a colour, because that is what is
+ * actually known: the shop has forty patterns with no names, and the number
+ * is the only handle anyone - the customer, the packer, the supplier - has
+ * on which one was meant. A colour name here would be invented, and it is
+ * the invention that would end up printed on the order.
+ *
+ * No variant is set. There is no row for "number 17", and none is needed:
+ * hoodies are made to order, so nothing downstream is counting them.
+ */
+async function applyChartNumber(bot, phone, convo, product, number) {
+  const colour = `Chart #${number}`;
+
+  await conversationService.save(phone, {
+    state: STATES.SELECT_COLOR,
+    selected_product_id: product.id,
+    selected_variant_id: null,
+    data: { ...convo.data, color: colour },
+  });
+
+  logger.info('chart.number_picked', { phone, action: `${product.design || product.name} ${colour}` });
+
+  const fresh = await conversationService.get(phone);
+  return afterColorSelected(bot, phone, product, colour, { quiet: false, convo: fresh });
+}
+
+/**
  * True when the shop is waiting for a chart with a colour marked on it.
  *
  * Only where the colours were offered as a card rather than as a list - the
@@ -1606,6 +1661,11 @@ async function awaitingMarkedChart(convo) {
   if (convo.state !== STATES.SELECT_COLOR || !convo.selected_product_id) return false;
   const product = await productService.getById(convo.selected_product_id).catch(() => null);
   if (!product) return false;
+
+  // A department with its own document - the hoodies and their numbered PDF.
+  if (await productService.chartFor(product)) return true;
+
+  // Or a product whose colours were shown as a card rather than a list.
   const colours = await productService.colorsOf(product).catch(() => []);
   return colours.length > CHART_COLOURS;
 }
@@ -1976,6 +2036,53 @@ async function handleMessage(bot, msg) {
   }
 
   /**
+   * "17" - a colour chosen off the numbered chart.
+   *
+   * Read here rather than handed to the brain, and that is not the brain
+   * being bypassed: the shop asked, one message ago, for a number off a
+   * document it has just sent. There is nothing to interpret. The brain
+   * cannot help either - the chart's forty entries have no names, so there
+   * is no list for it to match against and nothing it could return but the
+   * digits it was given.
+   *
+   * Checked against the count stored with the chart, so "50" out of thirty
+   * nine is refused rather than written onto an order nobody can fill.
+   */
+  if (convo.state === STATES.SELECT_COLOR) {
+    /**
+     * The number, however it was typed.
+     *
+     * This read the whole message as a number, so a bare "12" worked and
+     * "12 number wali" did not - and the message then went to the model,
+     * which answered a chart question with a colour name it invented
+     * ("Black", at full confidence, for a hoodie whose colours have no
+     * names at all).
+     *
+     * A short message carrying exactly one number, while looking at a
+     * chart, is that number. Two numbers or a long sentence is something
+     * else and is left alone.
+     */
+    const digits = String(text).match(/\d+/g) || [];
+    const words = String(text).trim().split(/\s+/).filter(Boolean);
+    const picked = digits.length === 1 && words.length <= 5 ? Number(digits[0]) : NaN;
+
+    if (Number.isInteger(picked) && picked > 0) {
+      const product = convo.selected_product_id
+        ? await productService.getById(convo.selected_product_id).catch(() => null)
+        : null;
+      const size = product ? await productService.chartSize(product) : 0;
+
+      if (size > 0) {
+        if (picked > size) {
+          await bot.sendMessage(phone, bot.t.chartNumberOutOfRange(size), { raw: true });
+          return 'chart_number_out_of_range';
+        }
+        return applyChartNumber(bot, phone, convo, product, picked);
+      }
+    }
+  }
+
+  /**
    * THE BRAIN, before anything reads the message for meaning.
    *
    * Everything below this point used to run first: a human-request pattern
@@ -2001,7 +2108,7 @@ async function handleMessage(bot, msg) {
    * There is no meaning to read and nothing a model could add, so it goes
    * straight to the flow that knows what was shown.
    */
-  const isMenuNumber = parser.parseMenuIndex(text) !== null;
+  const isMenuNumber = parser.isBareNumber(text);
 
   if (!command && !isMenuNumber) {
     const brainDecision = await think(bot, phone, convo, text).catch((err) => {
@@ -2331,10 +2438,13 @@ async function handleMessage(bot, msg) {
       const colors = await productService.colorsOf(product);
       const color = parser.chooseByNumber(text, colors);
       if (!color) {
+        // A product whose colours live on a chart is never asked to pick
+        // from a list - there is no list, only the file already sent.
+        const onChart = Boolean(await productService.chartFor(product));
         return offScript(bot, phone, convo, text, {
           phase: 'choosing a colour',
-          needed: `a colour: ${colors.join(', ')}`,
-          fallbackText: bot.t.colorNotUnderstood(colors),
+          needed: onChart ? 'a number from the colour chart' : `a colour: ${colors.join(', ')}`,
+          fallbackText: bot.t.colorNotUnderstood(colors, onChart),
         });
       }
       return afterColorSelected(bot, phone, product, color);

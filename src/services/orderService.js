@@ -11,6 +11,7 @@
 const { supabase, unwrap } = require('../db/supabase');
 const config = require('../config');
 const logger = require('../logger');
+const sheetService = require('./sheetService');
 const customerService = require('./customerService');
 const conversationService = require('./conversationService');
 const productService = require('./productService');
@@ -121,7 +122,30 @@ async function create(phone, draft) {
   );
 
   logger.info('order.created', { phone: key, orderId: order.order_id });
-  return getByOrderId(order.order_id);
+
+  const created = await getByOrderId(order.order_id);
+
+  /**
+   * And a line in the owner's spreadsheet, if they have set one up.
+   *
+   * Read back first, so the sheet gets the same row the panel shows rather
+   * than the half-built object above - the customer's name and address are
+   * joined in by getByOrderId and would otherwise be missing from exactly
+   * the place the owner needs them.
+   *
+   * Not awaited. A slow webhook must never sit between a customer and their
+   * booking number.
+   */
+  sheetService.order(created || order, [
+    {
+      product_name_snapshot: product.name,
+      color_snapshot: variant ? variant.color : draft.color || null,
+      size_snapshot: variant ? variant.size : draft.size || null,
+      quantity,
+    },
+  ]);
+
+  return created;
 }
 
 async function getByOrderId(orderId) {

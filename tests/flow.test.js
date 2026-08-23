@@ -457,18 +457,59 @@ ${reply}`
       assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
     });
 
-    await test('16. hoodie: no colour question, sizes only', async () => {
+    await test('16. hoodie: colour comes off the numbered chart, then sizes', async () => {
       const c = phone(17);
       await say(c, 'hi');
-      const reply = await say(c, 'bape single hood');
-      contains(reply, 'size');
-      assert.ok(!/colou?r\?/i.test(reply), 'hoodies have no colour to pick');
-      assert.strictEqual(await stateOf(c), 'SELECT_SIZE');
+
+      /**
+       * This used to assert the opposite - that a hoodie was never asked
+       * about colour and went straight to size. That was true because the
+       * shop had no hoodie colours recorded, not because it sells one: it
+       * sells about forty camo patterns with no names, and customers were
+       * being sold a hoodie without ever choosing which.
+       *
+       * They are a numbered document now, so the colour IS asked, and asked
+       * in the only way forty nameless patterns can be.
+       */
+      const asked = await say(c, 'bape single hood');
+      assert.strictEqual(await stateOf(c), 'SELECT_COLOR', 'the colour is asked first');
+      assert.ok(
+        /number/i.test(asked),
+        `the chart is useless without telling them how to answer it:
+${asked}`
+      );
+      assert.ok(
+        sent.some((m) => m.phone === c && m.type === 'media'),
+        'and the chart itself has to go with it'
+      );
+
+      const sized = await say(c, '7');
+      assert.strictEqual(await stateOf(c), 'SELECT_SIZE', 'a number moves it on');
+      contains(sized, 'size');
 
       const priced = await say(c, 'L');
       contains(priced, '3999');
       contains(priced, '1500'); // BAPE booking
       contains(priced, '2499'); // remaining
+    });
+
+    await test('16f. a number that is not on the chart is refused', async () => {
+      const c = phone(37);
+      await say(c, 'hi');
+      await say(c, 'bape single hood');
+
+      const refused = await say(c, '500');
+      assert.strictEqual(await stateOf(c), 'SELECT_COLOR', 'and it does not move on');
+
+      /**
+       * The real size of the chart, read back rather than written here.
+       *
+       * This said "39" for a while and then the chart lost a picture, and
+       * the test failed for the one reason that is not a bug. What has to be
+       * true is that the shop quotes its own range - whatever that is today.
+       */
+      const hoodie = (await productService.activeProducts()).find((p) => p.category === 'hoodie');
+      contains(refused, String(await productService.chartSize(hoodie)));
     });
 
     group('— questions are answered where they are asked —');
@@ -763,10 +804,12 @@ ${reply}`
       await say(a, 'spiderman');
       await say(b, 'bape single hood');
       assert.strictEqual(await stateOf(a), 'SELECT_SIZE', 'a is picking a size');
-      assert.strictEqual(await stateOf(b), 'SELECT_SIZE', 'b is on its own hoodie');
+      // b is a hoodie, so b is on the colour chart - a different step, which
+      // is the point: the two are at different places in different flows.
+      assert.strictEqual(await stateOf(b), 'SELECT_COLOR', 'b is on its own hoodie');
       await say(a, 'L');
       assert.strictEqual(await stateOf(a), 'COLLECT_DETAILS');
-      assert.strictEqual(await stateOf(b), 'SELECT_SIZE', 'b must not move when a does');
+      assert.strictEqual(await stateOf(b), 'SELECT_COLOR', 'b must not move when a does');
     });
 
     await test('34. order ids are unique and sequential', async () => {

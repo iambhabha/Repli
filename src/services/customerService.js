@@ -4,6 +4,7 @@
 
 const { supabase, unwrap } = require('../db/supabase');
 const config = require('../config');
+const sheetService = require('./sheetService');
 
 const DETAIL_FIELDS = ['name', 'address', 'city', 'state', 'pin'];
 
@@ -69,13 +70,28 @@ async function saveDetails(phone, details = {}) {
   }
   if (!Object.keys(patch).length) return existing;
 
-  return remember(
+  const saved = remember(
     key,
     unwrap(
       await supabase.from('customers').update(patch).eq('phone', key).select('*').single(),
       'customers.saveDetails'
     )
   );
+
+  /**
+   * And a copy into the owner's spreadsheet, if they have set one up.
+   *
+   * Here rather than at the call sites, because a customer's details are
+   * saved from more than one place and a copy that only happens on some of
+   * those paths is worse than none - it looks complete and is not.
+   *
+   * Deliberately not awaited. The sheet is a convenience for the owner; a
+   * slow or broken webhook must never hold up the customer's order, so this
+   * is fired and forgotten and the failure is a log line.
+   */
+  sheetService.customer(saved);
+
+  return saved;
 }
 
 /** True when we know everything needed to ship an order. */

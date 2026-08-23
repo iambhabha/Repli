@@ -326,12 +326,29 @@ async function humanise(text, lang = 'hi', phone = null, ctx = {}) {
       // Models sometimes hand the fence back with the text inside it. Strip
       // it rather than reject: the rewrite itself is usually perfectly good.
       cleaned = raw
+        /**
+         * The fenced markers, wherever they landed.
+         *
+         * These used to be stripped only when the model left one alone on
+         * its own line. It does not always do that: a customer asking about
+         * delivery was answered with "...20-30 din hota hai. REPLY>>>" - the
+         * marker glued to the end of the last sentence, where a whole-line
+         * filter could never see it.
+         *
+         * `<<<REPLY` and `REPLY>>>` carry the angle brackets, so they are
+         * unmistakable and safe to remove from anywhere in the text.
+         */
+        .replace(/<<<\s*REPLY|REPLY\s*>>>/gi, '')
         .split(/\r?\n/)
-        // Whole-line markers only: "<<<REPLY", "REPLY>>>", or a stray "REPLY"
-        // the model left behind. One of those reached a customer at the end
-        // of an order summary.
-        .filter((line) => !/^\s*(<<<\s*)?REPLY(\s*>>>)?\s*$/i.test(line))
+        // A bare "REPLY" is only a marker when it is the whole line. Inside
+        // a sentence it is just a word, and removing it would damage text
+        // the model wrote on purpose.
+        .filter((line) => !/^\s*REPLY\s*$/i.test(line))
         .join('\n')
+        // Whatever the marker left behind: a trailing space, or the blank
+        // line that used to hold it.
+        .replace(/[ \t]+$/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
         .trim();
 
       if (verify(original, cleaned)) return null;

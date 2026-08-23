@@ -24,6 +24,14 @@ const NUM_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️�
  */
 const CHART_THRESHOLD = 8;
 
+/**
+ * Colours a customer should actually see.
+ *
+ * "Default" is the internal name for a product that has no colour of its
+ * own. It is a placeholder, not a choice, and it must never reach a chat.
+ */
+const real = (colors) => (colors || []).filter((c) => c && c !== 'Default');
+
 const money = (amount) => `${config.CURRENCY}${Math.round(Number(amount || 0))}`;
 
 const numberedList = (items) =>
@@ -180,10 +188,20 @@ function createPack(language) {
         ? t('chooseColorOnChart', { emoji: product.emoji || '' })
         : t('chooseColor', { emoji: product.emoji || '', colors: numberedList(colors) }),
 
-    colorNotUnderstood: (colors) =>
-      colors.length > CHART_THRESHOLD
+    /**
+     * `onChart` decides, not the length of the list.
+     *
+     * The count was standing in for "does this product pick its colour from
+     * a chart", and it was wrong for the one product that matters: a
+     * made-to-order hoodie has no colour rows at all, so the list came back
+     * as the single placeholder `Default` - under the threshold, so the
+     * customer was shown a numbered list reading "1. Default" and asked to
+     * choose from it. The caller knows whether a chart exists; it says so.
+     */
+    colorNotUnderstood: (colors, onChart = false) =>
+      onChart || colors.length > CHART_THRESHOLD
         ? t('colorNotUnderstoodOnChart', {})
-        : t('colorNotUnderstood', { colors: numberedList(colors) }),
+        : t('colorNotUnderstood', { colors: numberedList(real(colors)) }),
 
     chooseSize: (sizes) => t('chooseSize', { sizes: sizes.join('\n') }),
 
@@ -360,6 +378,11 @@ function createPack(language) {
     help: () => t('help', {}),
 
     technicalError: () => t('technicalError', {}),
+
+    chartNumberOutOfRange: (count) => t('chartNumberOutOfRange', { count }),
+
+    chooseFromChart: (product) =>
+      t('chooseFromChart', { item: product.design || product.name }),
 
     paidBeforeDetails: () => t('paidBeforeDetails', {}),
 

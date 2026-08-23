@@ -307,6 +307,22 @@ function parseMenuIndex(text, max) {
 }
 
 /**
+ * A message that is a number and nothing else.
+ *
+ * Separate from parseMenuIndex because the two questions are different:
+ * that one asks "which item is this", and needs to know how long the list
+ * is; this one asks "is there anything here for a model to read", and does
+ * not. Calling parseMenuIndex without the length answered neither - it
+ * compared the number against undefined, quietly returned null for every
+ * input, and sent every bare "1" and "3" to the model as though it were a
+ * sentence. Whether the number is in range is for the flow to decide, once
+ * it knows which list is on the screen.
+ */
+function isBareNumber(text) {
+  return /^(\d{1,2})$/.test(normalize(text));
+}
+
+/**
  * Every word this product answers to.
  *
  * `products.keywords` comes first: that column is edited in the admin panel,
@@ -558,6 +574,7 @@ module.exports = {
   isNo,
   parseQuantity,
   parseMenuIndex,
+  isBareNumber,
   detectProductByKeyword,
   detectProductChoice,
   chooseByNumber,

@@ -43,10 +43,24 @@ async function facts() {
 }
 
 /**
- * The product the question is about: whatever they are already choosing, or
- * the first active one so a price question at "hello" still gets an answer.
+ * The product the question is about.
+ *
+ * In order of how much it is worth: the item the customer just named, then
+ * the one they are already choosing, then - only when nothing at all is
+ * known - the first in the catalogue, so that "kitne ka hai?" typed at
+ * "hello" still gets a number rather than silence.
+ *
+ * That last fallback used to be reached far more often than it should have
+ * been. A customer looking at the two hoodies asked "double wali ka rate kya
+ * hai"; the brain resolved it to BAPE Double Hood with full confidence, and
+ * then nobody passed that here - so the fallback quoted the first row in the
+ * table, which is a T-shirt. The customer was told a hoodie costs 2499 when
+ * it costs 3999. A wrong price is worse than no price, and this is the line
+ * that decides which one the shop gives.
  */
-async function subjectOf(convo) {
+async function subjectOf(convo, named) {
+  if (named) return named;
+
   if (convo && convo.selected_product_id) {
     const chosen = await productService.getById(convo.selected_product_id);
     if (chosen) return chosen;
@@ -59,9 +73,9 @@ async function subjectOf(convo) {
  * @returns {Promise<string|null>} the answer, or null when we have no stored
  *          fact for it - the caller then falls through to its normal flow.
  */
-async function answer(topic, { pack, convo }) {
+async function answer(topic, { pack, convo, subject }) {
   const stored = await facts();
-  const product = await subjectOf(convo);
+  const product = await subjectOf(convo, subject);
   const isHoodie = product && product.category === 'hoodie';
 
   switch (topic) {
@@ -123,9 +137,9 @@ async function answer(topic, { pack, convo }) {
  * touches conversation state - the next message continues from wherever the
  * customer already was.
  */
-async function tryAnswer(bot, phone, topic, { pack, convo }) {
+async function tryAnswer(bot, phone, topic, { pack, convo, subject }) {
   try {
-    const text = await answer(topic, { pack, convo });
+    const text = await answer(topic, { pack, convo, subject });
     if (!text) return false;
     await bot.sendMessage(phone, text);
     logger.info('faq.answered', { phone, action: topic });

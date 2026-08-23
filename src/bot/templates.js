@@ -212,6 +212,48 @@ Kitne chahiye?`,
 How many would you like?`,
   },
   {
+    key: 'chooseFromChart',
+    category: 'product',
+    /**
+     * Used where the range is a document rather than a list.
+     *
+     * The hoodies come in about forty camo patterns and none of them has a
+     * name - they are patterns, not colours. Sending forty photographs to
+     * ask one question is not an option, and naming them so they could be
+     * listed would mean the shop's catalogue being written by whoever wrote
+     * this file.
+     *
+     * So they go out as one numbered document. Two ways back are offered
+     * here, unlike the bag, and deliberately: a number can be typed in one
+     * character, and a screenshot survives a customer who cannot find the
+     * number. Both are exact. "The purple one" is not, when nine of them
+     * are purple.
+     */
+    label: 'Pick a colour off the numbered chart',
+    description:
+      'The range is a numbered PDF. They reply with a number or a screenshot of the one they want.',
+    placeholders: ['item'],
+    hi: `{{item}} 🔥
+
+Upar wali file me saare colour hain. Jo chahiye uska **number** bata do, ya us photo ka screenshot bhej do 👆`,
+    en: `{{item}} 🔥
+
+Every colour is in the file above. Tell me the **number** you want, or send a screenshot of that photo 👆`,
+  },
+  {
+    key: 'chartNumberOutOfRange',
+    category: 'product',
+    label: 'Chart number does not exist',
+    description: 'They gave a number past the end of the chart. Say the range, do not guess.',
+    placeholders: ['count'],
+    hi: `Bhai us number ka koi colour nahi hai 😅
+
+File me 1 se {{count}} tak hain - unme se koi number bata do, ya photo ka screenshot bhej do.`,
+    en: `There's no colour with that number 😅
+
+The file runs from 1 to {{count}} - give me one of those, or send a screenshot of the photo.`,
+  },
+  {
     key: 'colorNotUnderstoodOnChart',
     category: 'product',
     label: 'Colour not understood, off the printed chart',

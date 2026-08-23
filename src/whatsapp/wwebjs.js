@@ -18,6 +18,7 @@ const config = require('../config');
 const logger = require('../logger');
 const { puppeteerOptions } = require('./browser');
 const { MIME_BY_EXT } = require('./adapter');
+const settingsService = require('../services/settingsService');
 
 function mimeFor(filePath) {
   return MIME_BY_EXT[path.extname(filePath).toLowerCase()] || 'image/jpeg';
@@ -104,6 +105,172 @@ module.exports = function wwebjsDriver() {
   }
 
   /**
+   * Whether this picture is worth fetching before anyone has asked for it.
+   *
+   * Fails open on purpose. A lookup that breaks must never be the reason a
+   * customer's payment screenshot is thrown away - a wasted download is a
+   * log line, a lost proof of payment is an argument with a customer.
+   */
+  async function worthDownloading(phone, isGroup, isStatus) {
+    if (isGroup || isStatus || !phone) return false;
+
+    // No telephone number in the world is longer than fifteen digits.
+    // Communities and channels are eighteen, which is what gives them away.
+    if (String(phone).length > 15) return false;
+
+    try {
+      return (await settingsService.isAllowed(phone)) || (await settingsService.isAdmin(phone));
+    } catch (err) {
+      logger.warn('whatsapp.media_gate_failed', { phone, error: err.message });
+      return true;
+    }
+  }
+
+  /**
+   * The customer's picture, fetched the long way round.
+   *
+   * The library's own downloadMedia() never worked here, and the error it
+   * gave was the single letter "r" - a minified name from inside the page,
+   * which is why this went unexplained for so long. Asking the page directly
+   * produced the real one:
+   *
+   *   Msg.get(id)              -> nothing
+   *   Msg.getMessagesById([id]) -> DataError: Failed to execute 'get' on
+   *                                'IDBObjectStore': No key or key range
+   *                                specified
+   *   scanning the collection  -> found it
+   *
+   * Both of the library's lookups go through the message id, and this
+   * account's contacts are addressed as @lid rather than @c.us - ids like
+   * false_14280984416284@lid_3EB0D6AE. That form is not what the index
+   * expects, so IndexedDB is handed an empty key and throws, and the picture
+   * is lost even though the message is sitting in memory the whole time.
+   *
+   * So the message is found by walking the collection and comparing the
+   * serialised id, which needs no index at all. Everything after that is
+   * what the library would have done: resolve the media if it has not been
+   * fetched yet, then decrypt it.
+   *
+   * The library is still asked first. If a later version fixes its lookup,
+   * that path starts working again and this one stops being reached.
+   */
+  async function downloadPicture(message, phone) {
+    try {
+      const viaLibrary = await message.downloadMedia();
+      if (viaLibrary?.data) return viaLibrary;
+    } catch {
+      // Expected, for now. The scan below is the one that works.
+    }
+
+    try {
+      const picture = await client.pupPage.evaluate(async (msgId) => {
+        const Msg = window.require('WAWebCollections').Msg;
+        const models = Msg.getModelsArray ? Msg.getModelsArray() : Msg.models || [];
+        const msg = models.find((m) => m?.id?._serialized === msgId);
+
+        // REUPLOADING means the picture has expired on WhatsApp's side and
+        // the sender's app is re-uploading it. There is nothing to fetch.
+        if (!msg) return { skipped: 'message not in the collection' };
+
+        /**
+         * Wait for the media to be attached at all.
+         *
+         * The message model appears in the collection before its mediaData
+         * does, and giving up on that gap threw away a customer's ticked
+         * chart with the reason "no mediaData" - the picture was on its way,
+         * we simply looked a moment too early.
+         *
+         * The FETCHING wait below cannot help here, because it only runs
+         * once mediaData exists.
+         */
+        for (let waited = 0; waited < 3000 && !msg.mediaData; waited += 250) {
+          await new Promise((done) => setTimeout(done, 250));
+        }
+        if (!msg.mediaData) return { skipped: 'no mediaData' };
+        if (msg.mediaData.mediaStage === 'REUPLOADING') return { skipped: 'REUPLOADING' };
+
+        if (msg.mediaData.mediaStage !== 'RESOLVED') {
+          await msg.downloadMedia({ downloadEvenIfExpensive: true, rmrReason: 1 });
+        }
+
+        /**
+         * Give FETCHING a moment to become something.
+         *
+         * downloadMedia() can return while the fetch is still in flight, and
+         * treating that as a failure threw away a picture that arrived a
+         * second later - a customer's screenshot of the hoodie chart was
+         * lost exactly this way, with no error anywhere to explain it.
+         *
+         * Bounded, because a fetch that has not finished in three seconds is
+         * not going to finish inside this turn, and the shop must answer.
+         */
+        for (let waited = 0; waited < 3000 && msg.mediaData.mediaStage === 'FETCHING'; waited += 250) {
+          await new Promise((done) => setTimeout(done, 250));
+        }
+
+        const stage = String(msg.mediaData.mediaStage || '');
+        if (stage.includes('ERROR') || stage === 'FETCHING') return { skipped: stage };
+
+        /**
+         * The type the download manager will accept.
+         *
+         * `msg.type` is how WhatsApp classified the message, and it is not
+         * always a media type: a picture arrived once as "interactive", and
+         * passing that straight through was refused with "webMediaType is
+         * invalid: interactive" - the picture was there, correctly
+         * encrypted, and thrown away over a label.
+         *
+         * The mimetype says what the bytes actually are, so it decides when
+         * the two disagree.
+         */
+        const mime = String(msg.mimetype || '');
+        const kind = ['image', 'video', 'audio', 'document', 'sticker', 'ptt'].includes(msg.type)
+          ? msg.type
+          : mime.startsWith('image/')
+            ? 'image'
+            : mime.startsWith('video/')
+              ? 'video'
+              : 'document';
+
+        const decrypted = await window
+          .require('WAWebDownloadManager')
+          .downloadManager.downloadAndMaybeDecrypt({
+            directPath: msg.directPath,
+            encFilehash: msg.encFilehash,
+            filehash: msg.filehash,
+            mediaKey: msg.mediaKey,
+            mediaKeyTimestamp: msg.mediaKeyTimestamp,
+            type: kind,
+            signal: new AbortController().signal,
+            // The library passes one of these; the page expects the shape
+            // more than the behaviour, so a pair of no-ops satisfies it.
+            downloadQpl: { addAnnotations() { return this; }, addPoint() { return this; } },
+          });
+
+        return {
+          data: await window.WWebJS.arrayBufferToBase64Async(decrypted),
+          mimetype: msg.mimetype,
+          filename: msg.filename,
+          filesize: msg.size,
+        };
+      }, message.id?._serialized);
+
+      if (picture && picture.skipped) {
+        // Not an error - WhatsApp simply had nothing to give us. Logged so
+        // that "(no image)" is never again a silent, unexplained outcome.
+        logger.warn('whatsapp.media_unavailable', { phone, action: picture.skipped });
+        return null;
+      }
+      return picture;
+    } catch (err) {
+      // `phone` and not the raw address: a @lid id is not a phone number and
+      // logging it as one sent an eighteen-digit id into the phone field.
+      logger.error('whatsapp.media_failed', { phone, error: err.message, action: 'scan' });
+      return null;
+    }
+  }
+
+  /**
    * whatsapp-web.js message -> the shape the router expects.
    * Media is downloaded here so callers never deal with the library.
    */
@@ -148,42 +315,26 @@ module.exports = function wwebjsDriver() {
     };
 
     /**
-     * Status updates and group media are thrown away by the router anyway -
-     * downloading them first only wasted bandwidth and logged noisy errors.
+     * Only pictures somebody is going to look at.
      *
-     * One attempt, and one quick retry.
+     * Status updates and group media were already skipped, and it was not
+     * enough. A whole day of media_failed errors turned out to be one
+     * WhatsApp community: communities and channels arrive as eighteen-digit
+     * ids that do not end in @g.us, so they walked straight past the group
+     * check, failed to download, and logged an ERROR - and then the router
+     * dropped them on the allowlist a quarter of a second later.
      *
-     * It was three, spread over more than two seconds, on the theory that
-     * WhatsApp needed a moment to have the picture ready. The theory was
-     * wrong: across dozens of images not one second or third attempt ever
-     * succeeded, so the waiting bought nothing - and when forty-six photos
-     * arrived at once it turned into two minutes of the shop doing nothing
-     * but waiting to fail.
-     *
-     * The quick retry stays because it is nearly free. The failure itself is
-     * still unexplained ("r", from minified code inside the library) and is
-     * worth chasing separately; the caller is written to cope with no
-     * picture, so the shop answers either way.
+     * So the test is now the router's own: if this sender is not going to be
+     * answered, their picture is not going to be opened either. Both lookups
+     * are cached, so this costs nothing on the path that matters.
      */
-    if (isMedia && !isGroup && !isStatus) {
-      const waits = [0, 300];
-      for (let attempt = 0; attempt < waits.length; attempt += 1) {
-        if (waits[attempt]) await new Promise((done) => setTimeout(done, waits[attempt]));
-        try {
-          const downloaded = await message.downloadMedia();
-          if (downloaded?.data) {
-            normalised.media = {
-              buffer: Buffer.from(downloaded.data, 'base64'),
-              mimetype: downloaded.mimetype || mimetype || 'image/jpeg',
-            };
-            if (attempt > 0) logger.info('whatsapp.media_retried', { action: `attempt ${attempt + 1}` });
-            break;
-          }
-        } catch (err) {
-          if (attempt === waits.length - 1) {
-            logger.error('whatsapp.media_failed', { error: err.message, action: `${waits.length} attempts` });
-          }
-        }
+    if (isMedia && (await worthDownloading(phone, isGroup, isStatus))) {
+      const downloaded = await downloadPicture(message, phone);
+      if (downloaded) {
+        normalised.media = {
+          buffer: Buffer.from(downloaded.data, 'base64'),
+          mimetype: downloaded.mimetype || mimetype || 'image/jpeg',
+        };
       }
     }
 

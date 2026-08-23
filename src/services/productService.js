@@ -18,7 +18,9 @@
 
 const { supabase, unwrap } = require('../db/supabase');
 const cache = require('../db/cache');
+const settingsService = require('./settingsService');
 const storage = require('../db/storage');
+const logger = require('../logger');
 const config = require('../config');
 
 /** Every product row, active or not. */
@@ -183,10 +185,23 @@ async function stockOf(productId, color, size) {
   return Number.isFinite(qty) && qty > 0 ? Math.floor(qty) : 0;
 }
 
-/** Sizes of a colour that actually have stock right now. */
+/**
+ * Sizes of a colour that actually have stock right now.
+ *
+ * Every size, where the shop makes to order. Two reasons, and the second is
+ * the one that bit: nothing is counted for these, so a zero means "nobody
+ * typed a number" rather than "sold out"; and the colour being asked about
+ * may not name a variant at all. A hoodie colour picked off the numbered
+ * chart is recorded as "Chart #7", which matches no row, so this returned
+ * an empty list and the customer was told their size was gone - for a
+ * garment that had not been made yet.
+ */
 async function availableSizes(productId, color) {
-  const rows = await variantsOf(productId);
+  const product = await getById(productId);
   const sizes = await sizesOf({ id: productId });
+  if (product && product.made_to_order) return sizes;
+
+  const rows = await variantsOf(productId);
   return sizes.filter((size) =>
     rows.some(
       (v) =>
@@ -454,7 +469,45 @@ async function alternativesFor({ productId, color = null, size = null, limit = 3
   return out.slice(0, Math.max(0, limit));
 }
 
+/**
+ * The department's colour chart, when it has one.
+ *
+ * Some ranges are picked off a printed sheet rather than from a list of
+ * names: the bag has twenty-four colours on a card, and the hoodies have
+ * about forty camo patterns that have no names at all. Sending forty
+ * photographs to ask one question is not an option, and inventing forty
+ * names so they could be listed would be inventing the shop's catalogue.
+ *
+ * So a chart lives in app_settings under `chart_<category>` - the same place
+ * the payment scanner lives - and any product in that department sends it.
+ * Returns a local path, or null when the department has no chart, which is
+ * every department by default.
+ */
+async function chartSize(product) {
+  if (!product || !product.category) return 0;
+  const raw = await settingsService.value(`chart_${product.category}_count`, 0).catch(() => 0);
+  const count = Number(raw);
+  return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+}
+
+/**
+ * The department's colour chart, when it has one.
+ */
+async function chartFor(product) {
+  if (!product || !product.category) return null;
+  try {
+    const reference = await settingsService.value(`chart_${product.category}`, null);
+    if (!storage.isReference(reference)) return null;
+    return storage.localCopy(reference);
+  } catch (err) {
+    logger.warn('chart.unavailable', { action: product.category, error: err.message });
+    return null;
+  }
+}
+
 module.exports = {
+  chartFor,
+  chartSize,
   load,
   catalogue,
   invalidate,

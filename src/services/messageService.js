@@ -32,7 +32,13 @@ async function claimIncoming(message) {
 
   const { error } = await supabase.from('messages').insert(row);
 
-  if (!error) return true;
+  if (!error) {
+    // The owner's sheet keeps a "last message" column, so a past customer
+    // coming back is visible there without opening the panel. Throttled and
+    // fire-and-forget inside sheetService; nothing here waits for it.
+    require('./sheetService').seen(phone);
+    return true;
+  }
   if (error.code === UNIQUE_VIOLATION) return false;
 
   // Never drop a real customer message because logging failed.

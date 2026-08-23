@@ -473,8 +473,19 @@ function createExecutor(handlers) {
        */
       case 'answer_question': {
         if (!decision.question) return null;
+        /**
+         * The item they actually asked about.
+         *
+         * `subject` is already resolved above - what the brain named, or
+         * failing that what the conversation holds. Without passing it the
+         * FAQ had to guess, and its guess for somebody who has not selected
+         * anything yet is the first row in the catalogue: "double wali ka
+         * rate?" while looking at two hoodies was answered with a T-shirt's
+         * price, 2499 instead of 3999. The answer was there all along; it
+         * simply was not handed over.
+         */
         const answered = await faq
-          .tryAnswer(bot, phone, decision.question, { pack: bot.t, convo })
+          .tryAnswer(bot, phone, decision.question, { pack: bot.t, convo, subject })
           .catch(() => false);
         if (!answered) return null;
         act(decision.question);
