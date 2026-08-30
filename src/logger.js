@@ -43,7 +43,15 @@ function write(level, event, fields) {
   }
   if (record.message) parts.push(`msg="${String(record.message).replace(/\n/g, ' ⏎ ')}"`);
   if (record.error) parts.push(`error="${record.error}"`);
-  console.log(parts.join(' '));
+  // Cursor aborting the terminal closes stdout. Logging that as an
+  // uncaught EPIPE used to recurse until the log file ate the disk,
+  // and the WhatsApp client never reached ready — so messages arrived
+  // on screen and the bot never replied.
+  try {
+    if (process.stdout.writable) process.stdout.write(parts.join(' ') + '\n');
+  } catch (err) {
+    if (!err || err.code !== 'EPIPE') throw err;
+  }
 }
 
 module.exports = {

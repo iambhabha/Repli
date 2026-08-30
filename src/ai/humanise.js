@@ -218,6 +218,25 @@ function verify(original, rewritten) {
     for (const label of labels) if (!rewrittenLabels.includes(label)) return false;
   }
 
+  /**
+   * A photo caption names ONE product. The rewriter may not swap it for
+   * whatever is in the cart, and may not invent colour/size the template
+   * never mentioned - bags have no size, and "XXL ready" on a backpack
+   * photo was a live lie.
+   */
+  const namedItem = (text) => {
+    const hi = String(text).match(/^Ye\s+(.+?)\s+hai\b/i);
+    if (hi) return hi[1].trim().toLowerCase();
+    const en = String(text).match(/^Here is the\s+(.+?)(?:\s*[👇.!]|$)/i);
+    return en ? en[1].trim().toLowerCase() : null;
+  };
+  const beforeItem = namedItem(original);
+  const afterItem = namedItem(rewritten);
+  if (beforeItem && afterItem && beforeItem !== afterItem) return false;
+
+  const ATTR = /\b(?:XXL|XL|XXS|XS)\b|\b(?:size|sizes|colour|color|colors|colours)\b/i;
+  if (!ATTR.test(original) && ATTR.test(rewritten)) return false;
+
   return true;
 }
 

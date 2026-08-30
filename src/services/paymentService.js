@@ -160,9 +160,24 @@ async function handlePaymentProof(bot, order, media, messages, seen = null) {
     if (seen.status) lines.push(`status : ${seen.status}`);
     if (seen.reference) lines.push(`ref    : ${seen.reference}`);
     if (seen.app) lines.push(`app    : ${seen.app}`);
+    /**
+     * Who it was paid to, when the screen says.
+     *
+     * The amount can be right and the payment still be nothing to do with
+     * this shop - a genuine receipt for money sent to somebody else looks
+     * identical in every other field. This is the line that catches that,
+     * and it only works if a person reads it, which is why it sits in the
+     * alert rather than in a rule.
+     */
+    if (seen.paidTo) lines.push(`paid to: ${seen.paidTo}`);
 
     const expected = Number(updated.booking_amount);
-    if (seen.amount !== null && Number.isFinite(expected) && expected > 0 && seen.amount !== expected) {
+    if (
+      seen.amount !== null &&
+      Number.isFinite(expected) &&
+      expected > 0 &&
+      Math.round(seen.amount) !== Math.round(expected)
+    ) {
       lines.push(`⚠️ order ₹${expected} maangta hai, screenshot ₹${seen.amount} dikhati hai`);
     }
     alert += `\n${lines.join('\n')}`;

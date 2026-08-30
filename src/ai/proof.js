@@ -48,6 +48,9 @@ const SYSTEM = [
   '           says so in words.',
   ' reference the UPI transaction / UTR id, exactly as printed. null if absent.',
   ' app       which app it is from, if the screen names it. null otherwise.',
+  ' paidTo    WHO the money went to, exactly as printed - the payee name, the',
+  '           UPI id, or the masked account. Copy it; do not tidy it up. null',
+  '           if the screen does not show a recipient.',
   ' looksLikePayment  true only if this really is a payment confirmation',
   '                   screen. false for anything else - a product photo, a',
   '                   chat screenshot, a selfie, a blank image.',
@@ -109,12 +112,33 @@ function validate(raw) {
     if (text && text.length <= 20) app = text;
   }
 
+  /**
+   * Who the money went to.
+   *
+   * The one thing a screenshot can prove that the amount cannot: a customer
+   * can send a perfectly genuine ₹1500 receipt for a payment made to
+   * somebody else entirely, and every other field on it will look right.
+   * Showing the payee to the person approving it turns that from an
+   * argument three days later into a glance.
+   *
+   * Deliberately permissive about characters - payee lines are names, UPI
+   * ids and masked account numbers, and mangling one to fit a strict
+   * pattern would be worse than showing it as printed. The length cap is
+   * the only guard, so a model that started narrating cannot fill the alert.
+   */
+  let paidTo = null;
+  if (parsed.paidTo) {
+    const text = String(parsed.paidTo).trim().replace(/\s+/g, ' ');
+    if (text && text.length <= 60) paidTo = text;
+  }
+
   return {
     value: {
       amount,
       status,
       reference,
       app,
+      paidTo,
       looksLikePayment: parsed.looksLikePayment,
     },
   };
@@ -144,7 +168,7 @@ async function read({ buffer, mimetype, phone = null }) {
     json: true,
     // Reading, not writing. There is nothing here to be creative about.
     temperature: 0,
-    maxTokens: 150,
+    maxTokens: 220,
     image: { buffer, mimetype },
     user: 'What does this screenshot show?',
     verify: (raw) => {
@@ -164,6 +188,9 @@ async function read({ buffer, mimetype, phone = null }) {
       accepted.amount === null ? 'amount=?' : `amount=${accepted.amount}`,
       accepted.status && `status=${accepted.status}`,
       accepted.reference ? 'ref=yes' : 'ref=no',
+      // Whether a payee was legible, never the payee itself: this is a log,
+      // and somebody's name does not belong in one.
+      accepted.paidTo ? 'payee=yes' : 'payee=no',
     ]
       .filter(Boolean)
       .join(' '),

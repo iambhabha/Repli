@@ -125,6 +125,7 @@ function wrap(driver) {
 
   const adapter = {
     driver: driver.name,
+    _impl: driver,
     typing,
 
     onMessage(fn) {
@@ -180,19 +181,36 @@ function wrap(driver) {
        * send repeatedly, a retry loop nobody has found yet. The first reply
        * always goes; the repeats are dropped and counted.
        *
-       * Sixty seconds, and only for an EXACTLY identical message. Anything
-       * the shop genuinely needs to say twice - a size question after a
-       * detour, a summary shown again - differs by at least a word, and a
-       * minute later the same words are a reminder rather than a stutter.
+       * Only for an EXACTLY identical message. Anything the shop genuinely
+       * needs to say twice - a size question after a detour, a summary shown
+       * again - differs by at least a word, and once the window has passed
+       * the same words are a reminder rather than a stutter.
+       *
+       * Raw messages are guarded too, on a much shorter fuse. This used to
+       * sit inside `if (!options.raw)`, so every message that skipped the
+       * rewriter skipped the guard as well - the details form, the summary,
+       * the mid-order acknowledgements - which left the one fault it exists
+       * to prevent reachable through the back door. They cannot share a
+       * window, though: a raw message is often one the shop legitimately
+       * repeats, and a minute of silence on the address form would leave the
+       * customer staring at nothing.
+       *
+       * The slot is claimed BEFORE the rewrite and the send. Claiming it
+       * afterwards reads correctly and loses every race - rewriting and
+       * sending take a couple of seconds, so a burst all reach the check
+       * while the map is still empty, all pass, and all go out. That is why
+       * the forty-five got through: each turn overtook the one before it.
        */
-      if (!options.raw) {
-        const last = recentlySent.get(to);
-        if (last && last.body === String(text) && Date.now() - last.at < REPEAT_WINDOW) {
-          last.dropped += 1;
-          logger.info('reply.repeat_suppressed', { phone: to, action: `${last.dropped} dropped` });
-          return;
-        }
+      const window = options.raw ? RAW_REPEAT_WINDOW : REPEAT_WINDOW;
+      const last = recentlySent.get(to);
+
+      if (last && last.body === String(text) && Date.now() - last.at < window) {
+        last.dropped += 1;
+        logger.info('reply.repeat_suppressed', { phone: to, action: `${last.dropped} dropped` });
+        return;
       }
+
+      recentlySent.set(to, { body: String(text), at: Date.now(), dropped: 0 });
 
       // The AI only ever rephrases what is already decided, and only for
       // customers: an admin reading "/paid REP-1039 done" wants the exact
@@ -220,7 +238,6 @@ function wrap(driver) {
 
       try {
         await driver.sendMessage(to, body);
-        recentlySent.set(to, { body: String(text), at: Date.now(), dropped: 0 });
         logger.info('reply.sent', { phone: to, reply: body });
 
         /**
@@ -235,6 +252,15 @@ function wrap(driver) {
         // should not wait on our own bookkeeping.
         void messageService.recordOutgoing(to, body, 'text');
       } catch (err) {
+        /**
+         * The slot was claimed before the send, so a failure has to give it
+         * back. Otherwise a WhatsApp blip swallows the reply AND every retry
+         * for the next minute, and the customer hears nothing.
+         */
+        const claimed = recentlySent.get(to);
+        if (claimed && claimed.body === String(text) && claimed.dropped === 0) {
+          recentlySent.delete(to);
+        }
         logger.error('reply.failed', { phone: to, error: err.message });
       }
     },
@@ -340,6 +366,16 @@ const DRIVERS = {
  * Trimmed when it grows, so a busy day cannot turn it into a leak.
  */
 const REPEAT_WINDOW = 60_000;
+
+/**
+ * The same window, for messages that bypass the rewriter.
+ *
+ * Short because these are the replies the shop repeats on purpose - the
+ * address form, the summary - and a long window would swallow a re-ask the
+ * customer is waiting on. Long enough that a burst of images arriving in the
+ * same second still collapses to one reply.
+ */
+const RAW_REPEAT_WINDOW = 10_000;
 const recentlySent = new Map();
 
 setInterval(() => {

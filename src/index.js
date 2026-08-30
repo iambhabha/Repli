@@ -88,10 +88,18 @@ async function main() {
   const bot = createAdapter();
   bot.onMessage(createRouter(bot));
 
+  process.stdout.on('error', (err) => {
+    if (err && err.code === 'EPIPE') return;
+  });
+  process.stderr.on('error', (err) => {
+    if (err && err.code === 'EPIPE') return;
+  });
+
   process.on('unhandledRejection', (err) => {
     logger.error('process.unhandled_rejection', { error: err && (err.stack || err.message || err) });
   });
   process.on('uncaughtException', (err) => {
+    if (err && err.code === 'EPIPE') return;
     logger.error('process.uncaught_exception', { error: err && (err.stack || err.message) });
   });
 

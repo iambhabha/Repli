@@ -131,6 +131,13 @@ const SYSTEM = [
   'be null. A department word is not a design, even when designs are already',
   'on their screen. Do not pick one for them; showing the list IS the answer.',
   '',
+  'PHOTOS ARE NOT A LIST. "hoodies ki images", "bag ki photo", "uski pics',
+  'dikhao" is ask_image / show_image - even when they only named a department.',
+  'show_products is for "kya kya hai" / "options dikhao", never for a request',
+  'to SEE pictures. If the department has several designs and they did not',
+  'name one, still decide show_image with that category and product null -',
+  'the shop will ask which photo. Do not answer a photo request with a menu.',
+  '',
   'A FOLLOW-ON CARRIES THE PREVIOUS REQUEST. "bhi", "aur", "uska bhi",',
   '"ye wala bhi" continue what was just asked, they do not start something',
   'new. After "iski photo bhejo", "black wali bhi dena" means the black',
@@ -138,8 +145,11 @@ const SYSTEM = [
   'the Venom. Look at the previous turn before deciding.',
   '',
   'RESOLVE REFERENCES. "iska", "ye wala", "wo", "pehla wala", "jo dikhaya',
-  'tha" refer to something already in the conversation - the selected design,',
-  'or one of the products last shown. Work out which and name it.',
+  'tha" refer to something already in the conversation - prefer what was',
+  'LAST SHOWN TO THEM when they just browsed a list, and only fall back to',
+  'the selected cart design when nothing was just shown. A customer who saw',
+  'hoodies and said "iski image" means a hoodie, not the T-shirt still in',
+  'their cart from earlier.',
   '',
   'NEVER INFER A DEPARTMENT FROM A COLOUR. A colour tells you nothing about',
   'whether something is a shirt, a hoodie or a bag. If they said only a',
@@ -571,6 +581,33 @@ async function decide({
   });
 
   if (!answer || !accepted) return null;
+
+  /**
+   * "hoodies ki images" / "bag ki photo" / "uski bhi dikhao" kept coming
+   * back as browse → show_products. A photo ask is show_image.
+   */
+  const PHOTO_ASK =
+    /\b(images?|photos?|pics?|tasveer|dikha(?:o|na)?|iamge|pic)\b/i;
+  const FOLLOW_ON = /\b(bhi|aur|uska|uski|iski|yeh?|wo)\b/i;
+  if (
+    accepted.decision === 'show_products' &&
+    (PHOTO_ASK.test(message) ||
+      (FOLLOW_ON.test(message) && accepted.selection && accepted.selection.category))
+  ) {
+    accepted = {
+      ...accepted,
+      intent: 'ask_image',
+      decision: 'show_image',
+      imageKind: accepted.imageKind || 'all',
+    };
+  }
+  if (accepted.intent === 'ask_image' && accepted.decision === 'show_products') {
+    accepted = {
+      ...accepted,
+      decision: 'show_image',
+      imageKind: accepted.imageKind || 'all',
+    };
+  }
 
   logger.info('ai.brain', {
     phone,

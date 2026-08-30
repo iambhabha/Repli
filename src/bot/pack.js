@@ -396,6 +396,21 @@ function createPack(language) {
 
     needOrderFirst: () => t('needOrderFirst', {}),
 
+    /**
+     * Says back what the shop currently has them down for.
+     *
+     * The bot cannot see what is in the picture and must never pretend to.
+     * What it can do is state the selection it is holding, so a customer
+     * whose photo was of something else spots the mismatch here rather than
+     * when the wrong piece arrives.
+     */
+    imageMidFlow: (product, colour, size) =>
+      t('imageMidFlow', {
+        item: product
+          ? describe(product.design || product.name, colour, size)
+          : 'abhi choose ho raha hai',
+      }),
+
     money,
     describe,
   };

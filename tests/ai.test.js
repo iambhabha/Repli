@@ -110,6 +110,30 @@ check('address form kept as a form', () => {
   assert.strictEqual(verify(form, rewritten), true);
 });
 
+check('photo caption cannot swap the product for the cart', () => {
+  assert.strictEqual(
+    verify(
+      'Ye Nike Elite Backpack hai bhai 👇',
+      'Ye Spider-Man hai bhai, Red color aur XXL size ke liye ready hai! 👇'
+    ),
+    false
+  );
+});
+
+check('photo caption cannot invent a size bags do not have', () => {
+  assert.strictEqual(
+    verify('Ye Nike Elite Backpack hai bhai 👇', 'Ye Nike Elite Backpack hai, XXL ready 👇'),
+    false
+  );
+});
+
+check('photo caption may still be lightly reworded', () => {
+  assert.strictEqual(
+    verify('Ye Nike Elite Backpack hai bhai 👇', 'Bhai ye Nike Elite Backpack hai 👇'),
+    true
+  );
+});
+
 console.log('\n— cost table —\n');
 
 check('mini model priced per token, not per call', () => {
@@ -145,6 +169,20 @@ check('a clean screenshot is read', () => {
   assert.strictEqual(out.value.amount, 500);
   assert.strictEqual(out.value.status, 'success');
   assert.strictEqual(out.value.reference, 'T2508191234');
+  assert.strictEqual(out.value.paidTo, null);
+});
+
+check('the payee is copied, not tidied, and capped', () => {
+  const out = readsAs({
+    amount: 500,
+    looksLikePayment: true,
+    paidTo: '  shop@upi  /  Masked  A/c  ',
+  });
+  assert.strictEqual(out.value.paidTo, 'shop@upi / Masked A/c');
+  assert.strictEqual(
+    readsAs({ amount: 500, looksLikePayment: true, paidTo: 'x'.repeat(61) }).value.paidTo,
+    null
+  );
 });
 
 check('rupee symbols and commas are stripped, the number survives', () => {
@@ -493,7 +531,7 @@ check('the executor, not the brain, owns the order', () => {
   );
 });
 
-check('the purchase path no longer reads a word list', () => {
+check('the purchase path does not let YES_WORDS skip the brain', () => {
   const fs = require('fs');
   const path = require('path');
   const flow = fs.readFileSync(path.join(__dirname, '..', 'src', 'bot', 'stateMachine.js'), 'utf8');
@@ -502,11 +540,25 @@ check('the purchase path no longer reads a word list', () => {
     flow.lastIndexOf('case STATES.WAITING_FOR_PAYMENT')
   );
   const code = summary.replace(/\/\*[\s\S]*?\*\//g, ' ');
-  assert.ok(!/parser\.isYes/.test(code), 'consent must not come from YES_WORDS');
   assert.ok(
-    !/createOrderAndAskPayment/.test(code),
-    'the order must be created behind the executor gates, not here'
+    /!brainDecision/.test(code),
+    'a word-list yes may only place an order when the brain did not run'
   );
+  assert.ok(/parser\.isYes/.test(code), 'and then only a short yes, as a fallback');
+  assert.ok(
+    /createOrderAndAskPayment/.test(code),
+    'the fallback still goes through the same create/stock gates'
+  );
+});
+
+check('unedited templates are refreshed, owner edits are not', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'bot', 'templates.js'), 'utf8');
+  const fn = source.slice(source.indexOf('async function ensureTemplates('));
+  assert.ok(/staleDefault/.test(fn), 'defaults that moved in code must be detected');
+  assert.ok(/unedited/.test(fn), 'owner-edited rows are recognised');
+  assert.ok(/patch\.body = nextBody/.test(fn), 'only an unedited row gets new copy in body');
 });
 
 

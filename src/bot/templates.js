@@ -4,9 +4,9 @@
  * Every customer-facing sentence Repli can say, as an editable template.
  *
  * The owner edits these in the admin panel; the defaults below are only the
- * starting point. On startup any missing row is copied into
- * `message_templates`, and existing rows are never touched - a wording the
- * owner chose must survive a deploy.
+ * starting point. On startup missing rows are inserted, and unedited rows
+ * (body still equal to default_body) pick up new copy from this file. A
+ * wording the owner edited is never overwritten.
  *
  * Templates use {{placeholders}}. Anything a message needs is passed in
  * already formatted (prices with the currency symbol, lists already
@@ -789,6 +789,44 @@ Order karne ke liye "start" bhej do.`,
 
 Send "start" to place one.`,
   },
+  {
+    key: 'imageMidFlow',
+    category: 'order',
+    /**
+     * The picture that arrives while they are still choosing.
+     *
+     * A customer three steps into an order sent a screenshot of the piece
+     * they wanted and was answered with "abhi koi pending order nahi hai" -
+     * the shop denying an order it had itself started, and sending them back
+     * to the beginning.
+     *
+     * This says the opposite of that: the picture arrived, nothing chosen so
+     * far is lost, and here is what the shop currently has them down for.
+     *
+     * It names the SELECTION, never the picture. The shop cannot see what is
+     * in the photograph and must not imply that it can - but saying back
+     * what it is holding does the useful half of the job: a customer whose
+     * photo was of something else says so here, which is far cheaper than
+     * finding out when the parcel is opened.
+     *
+     * The step's own question follows this message, so the order carries on
+     * to the address and the payment instead of stopping at a photo.
+     */
+    label: 'Picture sent while still choosing',
+    description:
+      'A photo arrived mid-order. Acknowledge it, say back what is selected, and carry on with the flow.',
+    placeholders: ['item'],
+    hi: `Image mil gayi bhai 👍
+
+Abhi aapke liye ye likha hai: {{item}}
+
+Kuch aur chahiye to bata dena.`,
+    en: `Got your image 👍
+
+Here's what I have for you: {{item}}
+
+Tell me if you meant something else.`,
+  },
 
   // -------------------------------------------------------------- payment
   {
@@ -853,12 +891,12 @@ Please send the screenshot here once you have paid 🙏`,
 
 Payment proof mil gaya.
 
-Main abhi apne agent se confirm karwa raha hoon - bas thodi hi der me bata deta hoon 🙏`,
+Ab hamare agent aapse aage baat karenge - wo screenshot check karke aapko confirm kar denge 🙏`,
     en: `Thank you ❤️
 
 Got your payment proof.
 
-I'm getting it confirmed with my agent right now - I'll let you know in just a bit 🙏`,
+Our agent will take it from here - they'll check the screenshot and confirm with you 🙏`,
   },
   {
     key: 'confirmSwitch',
@@ -874,14 +912,16 @@ I'm getting it confirmed with my agent right now - I'll let you know in just a b
      * makes the shop sound like it is listening.
      */
     description:
-      'They named a different item while already choosing one. Confirms the switch before dropping what they had picked.',
+      'They asked to move the order to another item. Confirms before clearing colour/size/details — not a photo preview.',
     placeholders: ['item'],
-    hi: `{{item}} ki baat kar rahe ho bhai? 🤔
+    hi: `{{item}} pe order shift karu bhai? 🤔
 
-Haan bolo to wahi dikha deta hoon.`,
-    en: `Did you mean {{item}}? 🤔
+Haan bolo to current wala hata ke {{item}} pe chalte hain — colour/size/details dubara lagenge.
+Nahi bolo to order jaisa hai waisa rehne do.`,
+    en: `Switch your order to {{item}}? 🤔
 
-Say yes and I'll pull it up.`,
+Say yes and I'll drop the current pick — colour, size and details will need to be set again.
+Say no and we keep what you already chose.`,
   },
   {
     key: 'paymentProofRead',
@@ -907,26 +947,39 @@ Say yes and I'll pull it up.`,
 
 Screenshot mil gaya, usme ₹{{amount}} dikh raha hai.
 
-Main abhi apne agent se confirm karwa raha hoon - bas thodi hi der me bata deta hoon 🙏`,
+Ab hamare agent aapse aage baat karenge - wo check karke aapko confirm kar denge 🙏`,
     en: `Thank you ❤️
 
 Got your screenshot - it shows ₹{{amount}}.
 
-I'm getting it confirmed with my agent right now - I'll let you know in just a bit 🙏`,
+Our agent will take it from here - they'll check it and confirm with you 🙏`,
   },
   {
     key: 'proofNotAPayment',
     category: 'payment',
-    label: 'Image received, but not a payment screenshot',
+    label: 'Image received while a payment was pending',
+    /**
+     * It no longer argues about what the picture is.
+     *
+     * This used to say "ye payment screenshot nahi lag rahi" and ask for the
+     * right one - a judgement made by a model looking at a photograph, and
+     * one it gets wrong on a bank receipt, a blurry screen, or a PDF. Being
+     * told your proof does not count, by a bot, at the moment you have just
+     * paid, is the worst thing the shop can say.
+     *
+     * So it acknowledges and hands over. A person looks at the picture and
+     * decides, which is what was going to happen anyway: the bot has never
+     * been allowed to confirm a payment on its own.
+     */
     description:
-      'They sent a picture while a payment was pending and it was not a payment screen. Ask, never accuse.',
+      'A picture arrived while a payment was pending. Acknowledge it and hand over to a person - never judge the image.',
     placeholders: [],
-    hi: `Image mil gayi bhai, par ye payment screenshot nahi lag rahi 🤔
+    hi: `Image mil gayi bhai 👍
 
-Payment ki screenshot bhej do, main verify karwa deta hoon 🙏`,
-    en: `Got the image, but it doesn't look like a payment screenshot 🤔
+Hamare agent aapse aage baat karenge - wo dekh kar aapko bata denge 🙏`,
+    en: `Got your image 👍
 
-Could you send the payment screenshot? I'll get it verified 🙏`,
+Our agent will take it from here - they'll look at it and get back to you 🙏`,
   },
   {
     key: 'verificationPending',
@@ -1284,35 +1337,82 @@ function startTemplateSync(intervalMs = TTL_MS) {
 }
 
 /**
- * Startup: make sure every template exists in the table so the panel can list
- * them. Insert-only - an existing row belongs to the owner.
+ * Startup: every template exists, and unedited rows pick up new copy.
+ *
+ * Missing keys are inserted (so a deploy that added `imageMidFlow` is live
+ * the next time the bot starts). Rows the owner has not touched - body still
+ * equals default_body - are refreshed to the catalogue text, which is how a
+ * wording fix in this file reaches a database seeded last month.
+ *
+ * Rows they DID edit are left as they typed them. Only default_body and the
+ * panel metadata move, so Reset in the panel restores the current default
+ * rather than last year's.
  */
 async function ensureTemplates() {
-  const { data, error } = await supabase.from('message_templates').select('key,language');
+  const { data, error } = await supabase
+    .from('message_templates')
+    .select('key,language,body,default_body');
   if (error) {
     logger.error('templates.ensure_failed', { error: error.message });
     return 0;
   }
 
-  const existing = new Set((data || []).map((row) => cacheKey(row.key, row.language)));
+  const existing = new Map((data || []).map((row) => [cacheKey(row.key, row.language), row]));
   const missing = [];
+  let refreshed = 0;
 
-  CATALOGUE.forEach((entry, index) => {
+  for (let index = 0; index < CATALOGUE.length; index += 1) {
+    const entry = CATALOGUE[index];
     for (const language of LANGUAGES) {
-      if (existing.has(cacheKey(entry.key, language))) continue;
-      missing.push({
-        key: entry.key,
-        language,
-        body: entry[language],
-        default_body: entry[language],
+      const id = cacheKey(entry.key, language);
+      const nextBody = entry[language];
+      const row = existing.get(id);
+
+      if (!row) {
+        missing.push({
+          key: entry.key,
+          language,
+          body: nextBody,
+          default_body: nextBody,
+          label: entry.label,
+          description: entry.description || null,
+          placeholders: entry.placeholders,
+          category: entry.category,
+          sort_order: index,
+        });
+        continue;
+      }
+
+      const unedited =
+        String(row.body || '').trim() === String(row.default_body || '').trim();
+      const staleDefault = String(row.default_body || '') !== String(nextBody || '');
+      if (!staleDefault) continue;
+
+      const patch = {
+        default_body: nextBody,
         label: entry.label,
         description: entry.description || null,
         placeholders: entry.placeholders,
         category: entry.category,
         sort_order: index,
-      });
+      };
+      if (unedited && staleDefault) patch.body = nextBody;
+
+      const { error: updateError } = await supabase
+        .from('message_templates')
+        .update(patch)
+        .eq('key', entry.key)
+        .eq('language', language);
+      if (updateError) {
+        logger.error('templates.refresh_failed', {
+          action: `${entry.key}:${language}`,
+          error: updateError.message,
+        });
+        continue;
+      }
+      refreshed += 1;
     }
-  });
+  }
 
   if (missing.length) {
     const { error: insertError } = await supabase.from('message_templates').insert(missing);
@@ -1323,8 +1423,12 @@ async function ensureTemplates() {
     logger.info('templates.seeded', { action: `${missing.length} rows` });
   }
 
+  if (refreshed) {
+    logger.info('templates.refreshed', { action: `${refreshed} rows` });
+  }
+
   await refresh(true);
-  return missing.length;
+  return missing.length + refreshed;
 }
 
 /**

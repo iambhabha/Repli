@@ -28,6 +28,104 @@ module.exports = function wwebjsDriver() {
   const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
   const qrcode = require('qrcode-terminal');
 
+  /**
+   * WhatsApp Web reloads once after restore. inject() evaluates in the page;
+   * if that navigation wins the race, puppeteer throws "Execution context
+   * was destroyed". Retry the same Client — do not destroy it. Destroying
+   * mid-restore has shown the QR again and dropped 'ready'.
+   */
+  if (!Client.prototype.__repliInjectRetry) {
+    const originalInject = Client.prototype.inject;
+    Client.prototype.inject = async function patchedInject() {
+      let lastErr = null;
+      for (let attempt = 1; attempt <= 6; attempt++) {
+        try {
+          return await originalInject.apply(this, arguments);
+        } catch (err) {
+          lastErr = err;
+          const msg = String((err && err.message) || err);
+          if (
+            !/Execution context was destroyed|Protocol error|Target closed/i.test(
+              msg
+            )
+          ) {
+            throw err;
+          }
+          logger.warn('whatsapp.inject_retry', { attempt, error: msg });
+          await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+        }
+      }
+      throw lastErr;
+    };
+    Client.prototype.__repliInjectRetry = true;
+  }
+
+  /**
+   * A busy WhatsApp deadlocks ready: Msg.on() is registered *inside*
+   * page.evaluate(), backlog fires immediately, each callback talks to Node
+   * while evaluate is still waiting. Ready never emits → no replies.
+   *
+   * Skip that evaluate during attach, emit ready, THEN register listeners
+   * when the Node bridge is free. Session is untouched — not a re-login.
+   * (An earlier in-page eval() defer never actually attached listeners.)
+   */
+  if (!Client.prototype.__repliAttachDefer) {
+    const originalAttach = Client.prototype.attachEventListeners;
+    Client.prototype.attachEventListeners = async function patchedAttach() {
+      const page = this.pupPage;
+      if (!page) return originalAttach.apply(this, arguments);
+      logger.info('whatsapp.attach_start', {});
+      const origEvaluate = page.evaluate.bind(page);
+      let listenerSrc = null;
+      page.evaluate = async function patchedEvaluate(fn, ...rest) {
+        const src = typeof fn === 'function' ? Function.prototype.toString.call(fn) : '';
+        // Any Msg.on registration inside WAWebCollections is the deadlock
+        // risk — match loosely; a too-strict check once let the original
+        // evaluate run and hung ready forever after authenticated.
+        if (
+          typeof fn === 'function' &&
+          src.includes('WAWebCollections') &&
+          src.includes('Msg.on')
+        ) {
+          listenerSrc = src;
+          logger.info('whatsapp.attach_defer', { bytes: src.length });
+          return;
+        }
+        return origEvaluate(fn, ...rest);
+      };
+      try {
+        await Promise.race([
+          originalAttach.apply(this, arguments),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('attach timeout')), 10000)
+          ),
+        ]);
+      } catch (err) {
+        logger.warn('whatsapp.attach_timeout', {
+          error: String((err && err.message) || err),
+        });
+      } finally {
+        page.evaluate = origEvaluate;
+      }
+      if (!listenerSrc) {
+        logger.warn('whatsapp.attach_missed', {});
+        return;
+      }
+      const run = new Function(`return (${listenerSrc})`)();
+      setTimeout(() => {
+        page
+          .evaluate(run)
+          .then(() => logger.info('whatsapp.attach_done', {}))
+          .catch((err) =>
+            logger.error('whatsapp.attach_failed', {
+              error: String((err && err.message) || err),
+            })
+          );
+      }, 50);
+    };
+    Client.prototype.__repliAttachDefer = true;
+  }
+
   let client = null;
   let connected = false;
   let handler = () => {};
@@ -90,6 +188,20 @@ module.exports = function wwebjsDriver() {
     const key = config.normalisePhone(phone);
     const known = chatIds.get(key);
     if (known) return known;
+
+    /**
+     * Sending to the shop's own number (admin alerts, live-test pings) must
+     * not call getNumberId. That lookup throws a minified "t" on this
+     * account and has logged the session out. The host WID is already on
+     * the client from the moment we are ready.
+     */
+    const host = client && client.info && client.info.wid;
+    const hostUser = host && host.user ? config.normalisePhone(host.user) : '';
+    if (host && key && key === hostUser) {
+      const self = host._serialized || `${host.user}@${host.server || 'c.us'}`;
+      chatIds.set(key, self);
+      return self;
+    }
 
     try {
       const id = await client.getNumberId(key);
@@ -163,33 +275,151 @@ module.exports = function wwebjsDriver() {
     }
 
     try {
-      const picture = await client.pupPage.evaluate(async (msgId) => {
+      const picture = await client.pupPage.evaluate(async ({ msgId, chat, t }) => {
         const Msg = window.require('WAWebCollections').Msg;
-        const models = Msg.getModelsArray ? Msg.getModelsArray() : Msg.models || [];
-        const msg = models.find((m) => m?.id?._serialized === msgId);
+        const modelsOf = () => (Msg.getModelsArray ? Msg.getModelsArray() : Msg.models || []);
+
+        const pathOf = (m) =>
+          (m && (m.directPath || (m.mediaData && m.mediaData.directPath))) || '';
+
+        const idOf = (m) => {
+          if (!m || !m.id) return '';
+          if (m.id._serialized) return m.id._serialized;
+          try {
+            return typeof m.id.toString === 'function' ? m.id.toString() : '';
+          } catch {
+            return '';
+          }
+        };
+
+        const sameChat = (m) => {
+          const remote = (m && m.id && m.id.remote) || (m && m.from) || '';
+          return Boolean(chat) && (remote === chat || String(remote) === String(chat));
+        };
+
+        const isPic = (m) => {
+          const kind = m && m.type;
+          return (
+            kind === 'image' ||
+            kind === 'document' ||
+            kind === 'sticker' ||
+            Boolean(pathOf(m))
+          );
+        };
+
+        /**
+         * The `message` event often hands us a stub id that never grows
+         * mediaData. Production probes showed the real picture sitting in
+         * the same chat a few rows away, already with a directPath, under
+         * an id we were never given. Prefer the exact row; if that row is
+         * still a chat stub, take the nearest picture in this chat.
+         */
+        const find = () => {
+          const models = modelsOf();
+          const exact = models.find((m) => idOf(m) === msgId);
+          if (exact && pathOf(exact)) return exact;
+
+          const pics = models.filter((m) => sameChat(m) && isPic(m) && pathOf(m));
+          if (pics.length) {
+            if (t) {
+              pics.sort(
+                (a, b) =>
+                  Math.abs(Number(a.t || a.timestamp || 0) - t) -
+                  Math.abs(Number(b.t || b.timestamp || 0) - t)
+              );
+              return pics[0];
+            }
+            return pics[pics.length - 1];
+          }
+          return exact;
+        };
+
+        /**
+         * Look the message up again on every pass, and wait for it to become
+         * a picture.
+         *
+         * This is the fault that survived four attempts at it. The `message`
+         * event fires the instant a row appears in the collection, and at
+         * that instant the row is a stub: the recorded shape of a failure
+         * reads `type: "chat"`, no directPath, no mediaKey, no filehash, and
+         * `__x_createdMediaDataOnInit` still on the object. It is not a text
+         * message - it is a picture that has not been built yet.
+         *
+         * The earlier waits looked at `mediaData` on a reference captured
+         * once, so they were watching an object the collection had already
+         * moved past. Re-finding each time is the difference, and the thing
+         * worth waiting for is `directPath` - without it there is nothing to
+         * fetch, whatever else is set.
+         *
+         * Five seconds, then give up: a customer is waiting on the other end
+         * and the flow copes with no picture. What it must not do is answer
+         * before the picture had a chance to arrive.
+         */
+        let msg = find();
+        for (let waited = 0; waited < 5000; waited += 250) {
+          if (msg && pathOf(msg)) break;
+          await new Promise((done) => setTimeout(done, 250));
+          msg = find() || msg;
+        }
 
         // REUPLOADING means the picture has expired on WhatsApp's side and
         // the sender's app is re-uploading it. There is nothing to fetch.
         if (!msg) return { skipped: 'message not in the collection' };
 
-        /**
-         * Wait for the media to be attached at all.
-         *
-         * The message model appears in the collection before its mediaData
-         * does, and giving up on that gap threw away a customer's ticked
-         * chart with the reason "no mediaData" - the picture was on its way,
-         * we simply looked a moment too early.
-         *
-         * The FETCHING wait below cannot help here, because it only runs
-         * once mediaData exists.
-         */
-        for (let waited = 0; waited < 3000 && !msg.mediaData; waited += 250) {
-          await new Promise((done) => setTimeout(done, 250));
-        }
-        if (!msg.mediaData) return { skipped: 'no mediaData' };
-        if (msg.mediaData.mediaStage === 'REUPLOADING') return { skipped: 'REUPLOADING' };
+        if (!pathOf(msg)) {
+          /**
+           * What the message model actually looked like, recorded.
+           *
+           * This is the one failure left in the incoming-media path, and
+           * four attempts at it have missed - each one aimed at `mediaData`,
+           * which is an assumption rather than something anyone has
+           * verified. So instead of another guess, the shape is written
+           * down at the moment it fails.
+           *
+           * Kept deliberately: the next occurrence will be a real customer's
+           * payment screenshot, and this line is what turns that into
+           * evidence instead of another shrug. It costs one WARN on a path
+           * that has already failed, and nothing on the path that works.
+           */
+          /**
+           * The message we were sent, and the messages that actually exist.
+           *
+           * Waiting longer did not help - after five seconds of re-finding,
+           * the row matched by this id is still `type: "chat"` with no
+           * directPath. So the question is no longer "has it hydrated yet"
+           * but "is this even the right row": the picture may be sitting in
+           * the collection under an id we were never given.
+           *
+           * Listing the newest few, with their type and whether they carry a
+           * directPath, answers that in one line of log.
+           */
+          const models = modelsOf();
+          const recent = models
+            .slice(-8)
+            .map((m) => `${m && m.type}${pathOf(m) ? '+path' : ''}:${idOf(m) || '?'}`)
+            .join(' | ');
 
-        if (msg.mediaData.mediaStage !== 'RESOLVED') {
+          return {
+            skipped: msg.mediaData ? 'no directPath' : 'no mediaData',
+            probe: {
+              asked: msgId,
+              chat,
+              type: msg.type,
+              mimetype: msg.mimetype,
+              hasMediaData: Boolean(msg.mediaData),
+              mediaStage: msg.mediaData && msg.mediaData.mediaStage,
+              hasDirectPath: Boolean(pathOf(msg)),
+              hasMediaKey: Boolean(msg.mediaKey || (msg.mediaData && msg.mediaData.mediaKey)),
+              total: models.length,
+              recent,
+            },
+          };
+        }
+        if (msg.mediaData && msg.mediaData.mediaStage === 'REUPLOADING') {
+          return { skipped: 'REUPLOADING' };
+        }
+
+        if (msg.mediaData && msg.mediaData.mediaStage !== 'RESOLVED') {
           await msg.downloadMedia({ downloadEvenIfExpensive: true, rmrReason: 1 });
         }
 
@@ -201,15 +431,22 @@ module.exports = function wwebjsDriver() {
          * second later - a customer's screenshot of the hoodie chart was
          * lost exactly this way, with no error anywhere to explain it.
          *
+         * Re-find each pass, same reason as the wait above: the collection
+         * can replace the model while we are watching the old one stay on
+         * FETCHING forever.
+         *
          * Bounded, because a fetch that has not finished in three seconds is
          * not going to finish inside this turn, and the shop must answer.
          */
-        for (let waited = 0; waited < 3000 && msg.mediaData.mediaStage === 'FETCHING'; waited += 250) {
+        for (let waited = 0; waited < 3000; waited += 250) {
+          msg = find() || msg;
+          if (!msg.mediaData || msg.mediaData.mediaStage !== 'FETCHING') break;
           await new Promise((done) => setTimeout(done, 250));
         }
 
-        const stage = String(msg.mediaData.mediaStage || '');
+        const stage = String((msg.mediaData && msg.mediaData.mediaStage) || '');
         if (stage.includes('ERROR') || stage === 'FETCHING') return { skipped: stage };
+        if (!pathOf(msg)) return { skipped: 'no directPath' };
 
         /**
          * The type the download manager will accept.
@@ -232,14 +469,15 @@ module.exports = function wwebjsDriver() {
               ? 'video'
               : 'document';
 
+        const media = msg.mediaData || {};
         const decrypted = await window
           .require('WAWebDownloadManager')
           .downloadManager.downloadAndMaybeDecrypt({
-            directPath: msg.directPath,
-            encFilehash: msg.encFilehash,
-            filehash: msg.filehash,
-            mediaKey: msg.mediaKey,
-            mediaKeyTimestamp: msg.mediaKeyTimestamp,
+            directPath: pathOf(msg),
+            encFilehash: msg.encFilehash || media.encFilehash,
+            filehash: msg.filehash || media.filehash,
+            mediaKey: msg.mediaKey || media.mediaKey,
+            mediaKeyTimestamp: msg.mediaKeyTimestamp || media.mediaKeyTimestamp,
             type: kind,
             signal: new AbortController().signal,
             // The library passes one of these; the page expects the shape
@@ -253,12 +491,20 @@ module.exports = function wwebjsDriver() {
           filename: msg.filename,
           filesize: msg.size,
         };
-      }, message.id?._serialized);
+      }, {
+        msgId: message.id?._serialized,
+        chat: String(message.from || ''),
+        t: Number(message.timestamp || 0),
+      });
 
       if (picture && picture.skipped) {
         // Not an error - WhatsApp simply had nothing to give us. Logged so
         // that "(no image)" is never again a silent, unexplained outcome.
-        logger.warn('whatsapp.media_unavailable', { phone, action: picture.skipped });
+        logger.warn('whatsapp.media_unavailable', {
+          phone,
+          action: picture.skipped,
+          error: picture.probe ? JSON.stringify(picture.probe).slice(0, 900) : undefined,
+        });
         return null;
       }
       return picture;
@@ -341,6 +587,134 @@ module.exports = function wwebjsDriver() {
     return normalised;
   }
 
+  async function launchClient() {
+    chatIds.clear();
+    client = new Client({
+      // Session survives restarts, in the same folder the old driver used.
+      authStrategy: new LocalAuth({
+        clientId: config.SESSION_ID,
+        dataPath: config.SESSION_DIR,
+      }),
+      puppeteer: puppeteerOptions(),
+      takeoverOnConflict: true,
+      qrMaxRetries: 0,
+      authTimeoutMs: 120000,
+    });
+
+    // WhatsApp only accepts a pairing-code request once the login screen is
+    // up, and 'qr' is the event that tells us it is. Ask once: asking again
+    // on every refresh would invalidate the code the owner is still typing.
+    let pairingAsked = false;
+
+    client.on('qr', async (qr) => {
+      if (config.WA_PAIRING_NUMBER && !pairingAsked) {
+        pairingAsked = true;
+        try {
+          const code = await client.requestPairingCode(config.WA_PAIRING_NUMBER);
+          const pretty = String(code).replace(/(.{4})(?=.)/g, '$1-');
+          console.log(
+            `\n🔑 Pairing code: ${pretty}\n` +
+              `   On WhatsApp (+${config.WA_PAIRING_NUMBER}): Linked devices >\n` +
+              '   Link a device > "Link with phone number instead" > enter this code.\n' +
+              '   (Valid for about 3 minutes. Restart the bot for a new one.)\n'
+          );
+          logger.info('whatsapp.pairing_code', { phone: config.WA_PAIRING_NUMBER });
+          // Fall through: the QR is printed too, so whoever is watching can
+          // use whichever is easier. Both link the same account.
+        } catch (err) {
+          pairingAsked = false;
+          logger.warn('whatsapp.pairing_failed', { error: String(err && err.message) });
+          console.warn(
+            `\n⚠️  Could not get a pairing code (${err && err.message}) - use the QR below.\n`
+          );
+        }
+      }
+
+      console.log('\n📱 QR code - WhatsApp > Linked devices > Link a device:\n');
+      qrcode.generate(qr, { small: true });
+      console.log('\n(Refreshes every ~20 seconds - always scan the newest one.)\n');
+    });
+
+    client.on('authenticated', () => {
+      logger.info('whatsapp.authenticated', {});
+      console.log('🔐 Session restored (no QR). Waiting until the bot can reply…');
+      /**
+       * attachEventListeners can sit forever inside exposeFunction while the
+       * page is busy. WhatsApp is already logged in; without this watchdog
+       * ready never fires and the bot never replies. Wire a minimal add
+       * listener so messages still reach Node, then mark connected.
+       */
+      setTimeout(() => {
+        if (connected) return;
+        const page = client && client.pupPage;
+        if (page) {
+          page
+            .evaluate(() => {
+              if (window.__repliMsgHooked) return 'already';
+              const { Msg } = window.require('WAWebCollections');
+              Msg.on('add', (msg) => {
+                if (!msg.isNewMsg) return;
+                if (msg.type === 'ciphertext') {
+                  if (typeof window.onAddMessageCiphertextEvent === 'function') {
+                    window.onAddMessageCiphertextEvent(window.WWebJS.getMessageModel(msg));
+                  }
+                  return;
+                }
+                if (typeof window.onAddMessageEvent === 'function') {
+                  window.onAddMessageEvent(window.WWebJS.getMessageModel(msg));
+                }
+              });
+              window.__repliMsgHooked = true;
+              return 'hooked';
+            })
+            .then((how) => logger.info('whatsapp.msg_hook', { action: how }))
+            .catch((err) =>
+              logger.warn('whatsapp.msg_hook_failed', {
+                error: String((err && err.message) || err),
+              })
+            );
+        }
+        connected = true;
+        const host = client.info?.wid?.user || 'unknown';
+        logger.warn('whatsapp.ready_watchdog', { phone: host });
+        console.log(`\n✅ Repli connected as ${host}\n`);
+      }, 12000);
+    });
+
+    client.on('auth_failure', (message) => {
+      connected = false;
+      logger.error('whatsapp.auth_failed', { error: String(message) });
+      console.error(`\n❌ Login failed: ${message}\n   Delete .wa-session/ and try again.\n`);
+    });
+
+    client.on('ready', () => {
+      connected = true;
+      const host = client.info?.wid?.user || 'unknown';
+      const self = client.info?.wid?._serialized;
+      if (self) chatIds.set(config.normalisePhone(host), self);
+      logger.info('whatsapp.ready', { phone: host });
+      console.log(`\n✅ Repli connected as ${host}\n`);
+    });
+
+    client.on('disconnected', (reason) => {
+      connected = false;
+      logger.warn('whatsapp.disconnected', { action: String(reason) });
+      console.warn(`\n⚠️  WhatsApp disconnected: ${reason}\n`);
+    });
+
+    // 'message' skips our own outgoing messages, which is what we want:
+    // the bot must never answer itself.
+    client.on('message', async (message) => {
+      try {
+        await handler(await normalise(message));
+      } catch (err) {
+        logger.error('whatsapp.on_message_failed', { error: err.message });
+      }
+    });
+
+    await client.initialize();
+  }
+
   return {
     name: 'wwebjs',
 
@@ -354,87 +728,7 @@ module.exports = function wwebjsDriver() {
 
     async start() {
       logger.info('whatsapp.starting', { action: 'wwebjs' });
-
-      client = new Client({
-        // Session survives restarts, in the same folder the old driver used.
-        authStrategy: new LocalAuth({
-          clientId: config.SESSION_ID,
-          dataPath: config.SESSION_DIR,
-        }),
-        puppeteer: puppeteerOptions(),
-        takeoverOnConflict: true,
-        qrMaxRetries: 0,
-      });
-
-      // WhatsApp only accepts a pairing-code request once the login screen is
-      // up, and 'qr' is the event that tells us it is. Ask once: asking again
-      // on every refresh would invalidate the code the owner is still typing.
-      let pairingAsked = false;
-
-      client.on('qr', async (qr) => {
-        if (config.WA_PAIRING_NUMBER && !pairingAsked) {
-          pairingAsked = true;
-          try {
-            const code = await client.requestPairingCode(config.WA_PAIRING_NUMBER);
-            const pretty = String(code).replace(/(.{4})(?=.)/g, '$1-');
-            console.log(
-              `\n🔑 Pairing code: ${pretty}\n` +
-                `   On WhatsApp (+${config.WA_PAIRING_NUMBER}): Linked devices >\n` +
-                '   Link a device > "Link with phone number instead" > enter this code.\n' +
-                '   (Valid for about 3 minutes. Restart the bot for a new one.)\n'
-            );
-            logger.info('whatsapp.pairing_code', { phone: config.WA_PAIRING_NUMBER });
-            // Fall through: the QR is printed too, so whoever is watching can
-            // use whichever is easier. Both link the same account.
-          } catch (err) {
-            pairingAsked = false;
-            logger.warn('whatsapp.pairing_failed', { error: String(err && err.message) });
-            console.warn(
-              `\n⚠️  Could not get a pairing code (${err && err.message}) - use the QR below.\n`
-            );
-          }
-        }
-
-        console.log('\n📱 QR code - WhatsApp > Linked devices > Link a device:\n');
-        qrcode.generate(qr, { small: true });
-        console.log('\n(Refreshes every ~20 seconds - always scan the newest one.)\n');
-      });
-
-      client.on('authenticated', () => {
-        logger.info('whatsapp.authenticated', {});
-        console.log('🔐 Scanned. Saving the session…');
-      });
-
-      client.on('auth_failure', (message) => {
-        connected = false;
-        logger.error('whatsapp.auth_failed', { error: String(message) });
-        console.error(`\n❌ Login failed: ${message}\n   Delete .wa-session/ and try again.\n`);
-      });
-
-      client.on('ready', () => {
-        connected = true;
-        const host = client.info?.wid?.user || 'unknown';
-        logger.info('whatsapp.ready', { phone: host });
-        console.log(`\n✅ Repli connected as ${host}\n`);
-      });
-
-      client.on('disconnected', (reason) => {
-        connected = false;
-        logger.warn('whatsapp.disconnected', { action: String(reason) });
-        console.warn(`\n⚠️  WhatsApp disconnected: ${reason}\n`);
-      });
-
-      // 'message' skips our own outgoing messages, which is what we want:
-      // the bot must never answer itself.
-      client.on('message', async (message) => {
-        try {
-          await handler(await normalise(message));
-        } catch (err) {
-          logger.error('whatsapp.on_message_failed', { error: err.message });
-        }
-      });
-
-      await client.initialize();
+      await launchClient();
     },
 
     async stop() {
@@ -529,6 +823,30 @@ module.exports = function wwebjsDriver() {
           error: err.message,
         });
       }
+    },
+
+    /**
+     * What the live Store actually holds. Used to prove incoming media is
+     * visible to the page, without waiting for a customer to send one.
+     */
+    async inspectStore() {
+      if (!client || !client.pupPage) return { connected: false };
+      return client.pupPage.evaluate(() => {
+        const Msg = window.require('WAWebCollections').Msg;
+        const models = Msg.getModelsArray ? Msg.getModelsArray() : Msg.models || [];
+        const pathOf = (m) =>
+          (m && (m.directPath || (m.mediaData && m.mediaData.directPath))) || '';
+        const withPath = models.filter((m) => pathOf(m));
+        return {
+          connected: true,
+          total: models.length,
+          withPath: withPath.length,
+          recent: models
+            .slice(-8)
+            .map((m) => `${m && m.type}${pathOf(m) ? '+path' : ''}`)
+            .join(' | '),
+        };
+      });
     },
   };
 };

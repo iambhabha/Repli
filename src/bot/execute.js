@@ -129,18 +129,6 @@ function createExecutor(handlers) {
         if (!sellable.some((row) => row.key === selection.category)) return null;
 
         /**
-         * Not while they are part-way through choosing something.
-         *
-         * Opening a department resets what they are shopping for, and a
-         * customer who has picked the Spider-Man and is choosing a size did
-         * not ask for that by saying "kapda kaisa hai". Read as browsing,
-         * it put them back at the design list with their choice gone - the
-         * failure that showed up as SELECT_SIZE becoming SELECT_PRODUCT.
-         *
-         * Leaving a chosen design IS a switch, so it goes through the path
-         * that asks first. Declining here hands the message to it.
-         */
-        /**
          * A colour cannot choose a department.
          *
          * "Red" came back as browse-the-hoodies, with a colour and a
@@ -196,20 +184,98 @@ function createExecutor(handlers) {
          *
          * The database settles it: if that department has exactly one
          * product, there is no ambiguity to ask about. More than one and
-         * this declines, and the flow asks which - because then the question
-         * is a real one.
+         * this asks which - after putting the list on screen and REMEMBERING
+         * it, so "iski" / "single wali" can resolve next turn.
+         *
+         * Prefer a design the brain named (or last-shown), not the cart, when
+         * they asked about a different department mid-order.
          */
-        let wanted = subject;
+        let wanted = named || null;
+        /**
+         * Department photo ask beats the cart.
+         *
+         * Mid Spider-Man order, "bag/hoodie ki images" must not keep the
+         * T-shirt the brain still had in ALREADY CHOSEN when a category was
+         * clearly named in the decision.
+         */
+        if (wanted && selection.category && wanted.category !== selection.category) {
+          wanted = null;
+        }
         if (!wanted && selection.category) {
           const inCategory = (await productService.activeProducts()).filter(
             (item) => item.category === selection.category
           );
-          if (inCategory.length === 1) [wanted] = inCategory;
+          if (inCategory.length === 1) {
+            [wanted] = inCategory;
+          } else if (inCategory.length > 1) {
+            await showCatalogue(bot, phone, selection.category);
+            await bot.sendMessage(phone, bot.t.whichPhoto(inCategory), { raw: true });
+            act(selection.category);
+            return 'brain_image_which';
+          }
         }
+        /**
+         * Last shown beats the cart when they asked for a photo.
+         *
+         * Mid Spider-Man order, after bag photos, "iski" / a vague follow-up
+         * must not fall back to the T-shirt still in ALREADY CHOSEN when
+         * `shown` remembers what we just put on screen.
+         */
+        const shownIds = (convo.data && convo.data.shown) || [];
+        if (!wanted && shownIds.length) {
+          if (chosen && shownIds.includes(chosen.id)) {
+            wanted = chosen;
+          } else if (shownIds.length === 1) {
+            wanted = await productService.getById(shownIds[0]).catch(() => null);
+          } else {
+            const shownRows = (
+              await Promise.all(
+                shownIds.map((id) => productService.getById(id).catch(() => null))
+              )
+            ).filter(Boolean);
+            if (shownRows.length) {
+              await bot.sendMessage(phone, bot.t.whichPhoto(shownRows), { raw: true });
+              act('shown');
+              return 'brain_image_which';
+            }
+          }
+        }
+        if (
+          wanted &&
+          chosen &&
+          wanted.id === chosen.id &&
+          shownIds.length &&
+          !shownIds.includes(chosen.id)
+        ) {
+          // Brain still pointed at the cart design; they were browsing elsewhere.
+          if (shownIds.length === 1) {
+            wanted = await productService.getById(shownIds[0]).catch(() => null);
+          } else {
+            const shownRows = (
+              await Promise.all(
+                shownIds.map((id) => productService.getById(id).catch(() => null))
+              )
+            ).filter(Boolean);
+            if (shownRows.length) {
+              await bot.sendMessage(phone, bot.t.whichPhoto(shownRows), { raw: true });
+              act('shown');
+              return 'brain_image_which';
+            }
+          }
+        }
+        if (!wanted) wanted = chosen;
         if (!wanted) return null;
         const subjectForImage = wanted;
         const owns = convo.selected_product_id === subjectForImage.id ? convo : null;
         await sendProductImage(bot, phone, subjectForImage, owns, decision.imageKind);
+        // So a follow-up "iski" / "uska back" lands on what we just showed.
+        await conversationService.save(phone, {
+          data: {
+            ...(convo.data || {}),
+            shown: [subjectForImage.id],
+            shownCategory: subjectForImage.category || null,
+          },
+        });
         act(subjectForImage.design || subjectForImage.name);
         return 'brain_image';
       }
@@ -233,14 +299,97 @@ function createExecutor(handlers) {
          * switch that has to be confirmed - it is never a silent restart.
          * Declining hands it to the flow, which asks.
          */
-        const committed =
-          convo.state === STATES.COLLECT_DETAILS ||
-          convo.state === STATES.ORDER_SUMMARY ||
+        /**
+         * Money already in flight is not a cart they can swap out of.
+         *
+         * WAITING_FOR_PAYMENT and PAYMENT_VERIFYING already have an order
+         * row. Offering a switch here, then applying it on "yes", cleared
+         * the conversation and left that unpaid order sitting in the
+         * database with nobody attached to it - and a screenshot arriving
+         * later would not file against it, because the customer was no
+         * longer on a payment step.
+         *
+         * Declining hands the message to tryBrowseWhilePaying, which shows
+         * the catalogue without moving the order. That is the only safe
+         * answer once money is involved.
+         */
+        const paying =
           convo.state === STATES.WAITING_FOR_PAYMENT ||
           convo.state === STATES.PAYMENT_VERIFYING;
-        if (committed) {
-          logger.info('brain.refused', { phone, action: 'design change mid-order' });
+        if (paying) {
+          logger.info('brain.refused', { phone, action: 'design change while paying' });
           return null;
+        }
+
+        /**
+         * Naming a design mid-order is usually a look, not a cart swap.
+         *
+         * "toh double ki" / "bouble ki" after hoodie photos became
+         * select_product → confirmSwitch → "ha" and wiped Spider-Man.
+         * If they were just browsing (`shown` / same department) or there
+         * is no buy verb, show the photo and leave the cart alone.
+         */
+        const BUY_VERBS =
+          /\b(order|kharid|lena|le\s*lo|lelo|le\s*lunga|de\s*do|dedo|book|buy|purchase|chahiye|lenge|lunga|loonga)\b/i;
+        const shownList = (convo.data && convo.data.shown) || [];
+        const browsingSameDept =
+          Boolean(convo.data && convo.data.shownCategory) &&
+          named.category === convo.data.shownCategory;
+        const lookOnly =
+          chosen &&
+          (shownList.includes(named.id) ||
+            browsingSameDept ||
+            !BUY_VERBS.test(text || ''));
+        if (lookOnly) {
+          const owns = convo.selected_product_id === named.id ? convo : null;
+          await sendProductImage(bot, phone, named, owns, decision.imageKind || 'all');
+          await conversationService.save(phone, {
+            data: {
+              ...(convo.data || {}),
+              shown: [named.id],
+              shownCategory: named.category || null,
+            },
+          });
+          act(named.design || named.name);
+          return 'brain_image';
+        }
+
+        const committed =
+          convo.state === STATES.COLLECT_DETAILS ||
+          convo.state === STATES.ORDER_SUMMARY;
+        if (committed) {
+          /**
+           * Refused, and then ASKED - which is what the rule always said.
+           *
+           * "a switch that has to be confirmed - it is never a silent
+           * restart. Declining hands it to the flow, which asks." The flow
+           * did not ask. `trySwitchItem` is the code that offers a switch,
+           * and it resolves nothing by name any more: `named` is hardcoded
+           * null there and it falls back to reading a CATEGORY out of the
+           * raw text. "venom" is a design, so it found nothing and returned.
+           *
+           * The result was the worst of both: a customer typing "nahi bhai
+           * venom wali de do" while giving their address had the request
+           * understood at full confidence, refused, and then never mentioned
+           * again - they were simply re-asked for their address, with no
+           * hint that the shop had heard them at all.
+           *
+           * So the offer is made here, where the resolved design already is.
+           * Nothing is cleared: `pendingSwitch` is remembered for exactly one
+           * turn, and the existing handler applies it only on a yes.
+           */
+          logger.info('brain.switch_offered', { phone, action: named.design || named.name });
+
+          await bot.sendMessage(phone, bot.t.confirmSwitch(named.design || named.name));
+          await conversationService.save(phone, {
+            data: {
+              ...convo.data,
+              pendingSwitch: { product: named.id, category: named.category },
+            },
+          });
+          logger.info('switch.asked', { phone, action: named.design || named.name });
+          act(named.design || named.name);
+          return 'switch_confirm';
         }
 
         /**

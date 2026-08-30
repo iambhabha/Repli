@@ -206,6 +206,26 @@ async function showCatalogue(bot, phone, category = null) {
   }
 
   await bot.sendMessage(phone, bot.t.welcome(withColour));
+
+  /**
+   * Remember the list without touching the cart.
+   *
+   * Mid-order "hoodies ki images bhi" used showCatalogue and never wrote
+   * `shown`. The next "iski photo" had only the T-shirt still in the cart
+   * to resolve against, so the shop sent Spider-Man photos of a hoodie ask.
+   * sendWelcome clears the cart on purpose; this path must not.
+   */
+  const convo = await conversationService.get(phone).catch(() => null);
+  if (convo) {
+    await conversationService.save(phone, {
+      data: {
+        ...(convo.data || {}),
+        shown: products.map((item) => item.id),
+        shownCategory: category || null,
+      },
+    });
+  }
+
   return products;
 }
 
@@ -512,16 +532,38 @@ async function sendProductImage(bot, phone, product, convo, kind = null) {
   if (!pictures.length) pictures = gallery;
 
   if (!pictures.length) {
-    // No photo is a fact like any other. Another product's picture would be
-    // worse than none at all.
-    await bot.sendMessage(phone, bot.t.noPhoto(product));
+    // No per-product gallery — but a department chart is a real photo of
+    // the line. Hoodies live as `chart_hoodie`; sending "photo nahi hai"
+    // while the colour chart sits in settings is the shop lying.
+    const chart = await productService.chartFor(product).catch(() => null);
+    if (chart) {
+      await bot.sendMessage(phone, bot.t.photoHere(product), { raw: true });
+      try {
+        await bot.sendImage(phone, chart, '');
+        logger.info('image.chart', { phone, action: product.code || product.name });
+        return true;
+      } catch (err) {
+        logger.warn('image.chart_failed', {
+          phone,
+          action: product.code || product.name,
+          error: err.message,
+        });
+      }
+    }
+    await bot.sendMessage(phone, bot.t.noPhoto(product), { raw: true });
     logger.info('image.none', { phone, action: product.code || product.name });
     return true;
   }
 
   // Text first, then the pictures: the arrow in the message points at what is
   // about to arrive under it.
-  await bot.sendMessage(phone, bot.t.photoHere(product));
+  //
+  // Raw on purpose. A customer mid Spider-Man order asked for bag photos;
+  // the rewriter kept the cart (Red / XXL) and rewrote "Ye Nike Elite
+  // Backpack hai" into "Ye Spider-Man hai … XXL … ready hai" - bags have
+  // no size, and the caption named the wrong product. The picture that
+  // followed was the bag; the line above it was a lie.
+  await bot.sendMessage(phone, bot.t.photoHere(product), { raw: true });
 
   /**
    * Sent one at a time, in order, and awaited.
@@ -1048,7 +1090,8 @@ async function afterColorSelected(bot, phone, product, color, extra = {}) {
         phone,
         extra.combined
           ? bot.t.colorPickedNowSize(product, color, sizesLeft)
-          : bot.t.chooseSize(allSizes)
+          : bot.t.chooseSize(allSizes),
+        { raw: true }
       );
     }
     await conversationService.save(phone, {
@@ -1557,7 +1600,7 @@ async function handleSize(bot, phone, convo, text) {
   }
 
   const sizes = await productService.sizesOf(product);
-  const size = null;
+  const size = parser.detectSize(text, sizes);
   if (!size) {
     return offScript(bot, phone, convo, text, {
       phase: 'choosing a size',
@@ -1753,6 +1796,94 @@ Order chalu hai - bot aage badh gaya hai.`;
   return 'chart_marked';
 }
 
+/**
+ * Ask again whatever the flow was already waiting for.
+ *
+ * A picture does not answer any of the shop's questions, so after one arrives
+ * the customer is still standing on the same step - and left to itself the
+ * conversation stops there, one message short of an order. This puts the
+ * question back in front of them so the flow carries on to the address, the
+ * summary and the payment, which is where it was already going.
+ *
+ * It changes no state. Every one of these is the same question the step
+ * asked when it was reached; asking it twice is safe, and is the only thing
+ * that keeps a photo from being a dead end.
+ */
+async function askCurrentStep(bot, phone, convo) {
+  const product = convo.selected_product_id
+    ? await productService.getById(convo.selected_product_id).catch(() => null)
+    : null;
+
+  switch (convo.state) {
+    case STATES.SELECT_CATEGORY:
+      return bot.sendMessage(
+        phone,
+        bot.t.chooseCategory(await categoryService.availableCategories()),
+        { raw: true }
+      );
+
+    case STATES.SELECT_PRODUCT:
+      // Sends the list again and changes nothing - see showCatalogue.
+      return showCatalogue(bot, phone, product ? product.category : null);
+
+    case STATES.SELECT_COLOR: {
+      if (!product) return null;
+      const colours = await productService.availableColors(product.id).catch(() => []);
+      return bot.sendMessage(phone, bot.t.chooseColor(product, colours), { raw: true });
+    }
+
+    case STATES.SELECT_SIZE: {
+      if (!product) return null;
+      const sizes = await productService.sizesOf(product).catch(() => []);
+      if (!sizes.length) return null;
+      return bot.sendMessage(phone, bot.t.chooseSize(sizes), { raw: true });
+    }
+
+    case STATES.SELECT_QUANTITY:
+      return bot.sendMessage(phone, bot.t.quantityPrompt(), { raw: true });
+
+    case STATES.ORDER_SUMMARY:
+      return showSummary(bot, phone, convo);
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Tell a person a picture arrived, and where the customer was standing.
+ *
+ * Without the step, the alert is only "a photo came in" and whoever reads it
+ * has to go and find the conversation to know what it is about.
+ */
+async function notifyAdminsOfImage(bot, phone, convo, msg) {
+  const product = convo.selected_product_id
+    ? await productService.getById(convo.selected_product_id).catch(() => null)
+    : null;
+
+  let file = null;
+  if (msg && msg.media && msg.media.buffer) {
+    try {
+      file = paymentService.saveProofFile(`pic-${phone}`, msg.media.buffer, msg.media.mimetype);
+    } catch (err) {
+      logger.warn('image.save_failed', { phone, error: err.message });
+    }
+  }
+
+  const note =
+    'CUSTOMER SENT A PICTURE\n\n' +
+    `Customer: ${phone}\n` +
+    `Step: ${phaseOf(convo)}\n` +
+    (product ? `Item so far: ${product.design || product.name}\n` : '') +
+    '\n' +
+    (file
+      ? 'Image attached - bot aage badh gaya hai.'
+      : 'Image download nahi hui - WhatsApp chat me dekh lijiye. Bot aage badh gaya hai.');
+
+  if (file) await bot.notifyAdminsImage(path.join(config.ROOT, file), note, phone);
+  else await bot.notifyAdmins(note);
+}
+
 /** A photo/PDF can only mean one thing here: payment proof. */
 async function handleMedia(bot, phone, convo, msg) {
   const order = await orderService.openFor(phone);
@@ -1912,7 +2043,7 @@ async function think(bot, phone, convo, text) {
     shown,
     known,
     history: redact.history(
-      await messageService.recentHistory(phone, 2).catch(() => []),
+      await messageService.recentHistory(phone, 6).catch(() => []),
       { detailsPhase: convo.state === STATES.COLLECT_DETAILS }
     ),
     language: convo.data && convo.data.lang,
@@ -2031,6 +2162,57 @@ async function handleMessage(bot, msg) {
       return 'media_before_details';
     }
 
+    /**
+     * A picture sent in the middle of choosing something.
+     *
+     * A real customer picked the Double Hood, got the chart, answered "5",
+     * and then sent a screenshot of the piece they wanted - and was told
+     * "abhi koi pending order nahi hai". They were three steps into an order
+     * the shop itself had started. Saying no order exists is both untrue and
+     * the fastest way to lose them.
+     *
+     * A picture at this point is the customer showing what they mean, and no
+     * amount of reading would settle it anyway: it is a photograph, and a
+     * person has to look at it. So it is acknowledged, handed to a person,
+     * and - the part that matters - the conversation is left exactly where
+     * it was rather than dropped back to the start.
+     */
+    const midFlow =
+      convo.state === STATES.SELECT_CATEGORY ||
+      convo.state === STATES.SELECT_PRODUCT ||
+      convo.state === STATES.SELECT_COLOR ||
+      convo.state === STATES.SELECT_SIZE ||
+      convo.state === STATES.SELECT_QUANTITY ||
+      convo.state === STATES.ORDER_SUMMARY;
+
+    if (midFlow) {
+      /**
+       * Not raw, on purpose.
+       *
+       * This is the one reply a burst of images produces, so it has to go
+       * through the duplicate guard. The question that carries the flow is
+       * sent separately, and raw, below.
+       */
+      const chosen = convo.selected_product_id
+        ? await productService.getById(convo.selected_product_id).catch(() => null)
+        : null;
+
+      await bot.sendMessage(phone, bot.t.imageMidFlow(chosen, colorOf(convo), sizeOf(convo)));
+      await notifyAdminsOfImage(bot, phone, convo, msg).catch(() => {});
+
+      /**
+       * And then the step they were on, asked again.
+       *
+       * Without this the picture ends the conversation: the shop says
+       * "noted" and never asks anything, so the customer waits, and the
+       * order that was three steps in is never placed. The whole point of
+       * handling a mid-flow picture is that the flow carries on to the
+       * address and the payment.
+       */
+      await askCurrentStep(bot, phone, convo).catch(() => {});
+      return 'media_mid_flow';
+    }
+
     await bot.sendMessage(phone, bot.t.needOrderFirst());
     return 'media_without_pending_payment';
   }
@@ -2110,8 +2292,9 @@ async function handleMessage(bot, msg) {
    */
   const isMenuNumber = parser.isBareNumber(text);
 
+  let brainDecision = null;
   if (!command && !isMenuNumber) {
-    const brainDecision = await think(bot, phone, convo, text).catch((err) => {
+    brainDecision = await think(bot, phone, convo, text).catch((err) => {
       logger.warn('brain.failed', { phone, error: err.message });
       return null;
     });
@@ -2436,7 +2619,7 @@ async function handleMessage(bot, msg) {
         return 'restart_missing_product';
       }
       const colors = await productService.colorsOf(product);
-      const color = parser.chooseByNumber(text, colors);
+      const color = parser.detectColorChoice(text, colors);
       if (!color) {
         // A product whose colours live on a chart is never asked to pick
         // from a list - there is no list, only the file already sent.
@@ -2476,8 +2659,8 @@ async function handleMessage(bot, msg) {
        * backend still decides whether that reading may become an order, and
        * checks the state, the draft and live stock before it does.
        *
-       * Nothing reaches createOrderAndAskPayment from here any more. It is
-       * reached from execute.js, behind those gates.
+       * When the brain did not run, a short yes still lands here, and still
+       * goes through createOrderAndAskPayment's draft and stock gates.
        */
       const declined = parser.isNo(text);
 
@@ -2489,6 +2672,23 @@ async function handleMessage(bot, msg) {
         });
         return 'summary_declined';
       }
+
+      /**
+       * A short yes, only when the brain did not already read this message.
+       *
+       * Consent is the brain's job when it is available. When it is not -
+       * no key, no budget, a timeout - "yes" on the summary still has to
+       * place the order, through the same draft/stock gates createOrder
+       * uses. A long sentence containing a yes word is left alone, so
+       * "haan but size change karna hai" cannot spend their money.
+       */
+      const shortYes =
+        parser.isYes(text) && String(text).trim().split(/\s+/).filter(Boolean).length <= 3;
+      if (!brainDecision && shortYes) {
+        const draft = await buildDraft(convo);
+        if (draft) return createOrderAndAskPayment(bot, phone, convo);
+      }
+
       return offScript(bot, phone, convo, text, {
         phase: 'confirming the order summary',
         needed: 'a yes or no on the summary',
