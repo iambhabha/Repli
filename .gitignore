@@ -1,25 +1,25 @@
 # secrets - NEVER commit
 .env
-
 # dependencies
 node_modules/
-
 # runtime data (never commit customer data or payment screenshots)
 data/proofs/
 logs/
-
 # whatsapp session
 .wa-session/
 *.data.json
 session/
-
 # misc
 npm-debug.log*
 .DS_Store
 *.tmp
-
 # whatsapp web version caches - runtime junk, re-downloaded on every start
 .wwebjs_cache/
-
 # local copies of objects already in the private bucket
 data/storage-cache/
+
+# managed
+**.data.json
+**.node-persist**
+**_IGNORE_**
+# end managed

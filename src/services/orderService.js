@@ -41,8 +41,15 @@ async function nextOrderId() {
  * Create a PENDING_PAYMENT order from the conversation draft.
  * Item rows snapshot name/colour/size/price so later price edits never
  * rewrite history.
+ *
+ * @param {object} [options]
+ * @param {'FULL'|'COD'} [options.paymentMode] Only meaningful when the
+ *        product offers COD, and only ever set once the customer has
+ *        actually chosen - see stateMachine's createOrderAndAskPayment.
+ *        Every other product ignores it and keeps the old single-advance
+ *        BOOKING/FULL split below.
  */
-async function create(phone, draft) {
+async function create(phone, draft, options = {}) {
   const key = config.normalisePhone(phone);
   const product = await productService.getById(draft.productId);
   if (!product) throw new Error(`Unknown product ${draft.productId}`);
@@ -52,18 +59,45 @@ async function create(phone, draft) {
   const unitPrice = productService.priceOf(product);
   const subtotal = unitPrice * quantity;
   const shipping = Math.max(0, Math.floor(config.SHIPPING_CHARGE));
-  const total = subtotal + shipping;
 
   /**
-   * What the customer actually pays now.
+   * Three ways an order can be paid for, and the split stored per order
+   * rather than read from the product later - the product's numbers can
+   * change and an order must keep the terms the customer was quoted.
    *
-   * A booking reserves the size; the rest is due when the piece is made. The
-   * split is stored per order rather than read from the product later,
-   * because the product's booking amount can change and an order must keep
-   * the terms the customer was quoted.
+   *   FULL    everything now. No advance/remaining wording applies.
+   *   COD     a small advance now confirms the booking; the rest is cash at
+   *           the door, not a second online payment - and the COD surcharge
+   *           is added to the total, never to the advance itself.
+   *   BOOKING the original shape, unchanged for every product that has not
+   *           been given a payment-mode choice: an advance now, the balance
+   *           once the piece is made.
    */
-  const bookingAmount = Math.min(total, Math.max(0, Number(product.booking_amount) || 0) * quantity);
-  const remainingAmount = bookingAmount > 0 ? total - bookingAmount : 0;
+  const codChosen = options.paymentMode === 'COD' && productService.offersPaymentChoice(product);
+  const fullChosen = options.paymentMode === 'FULL';
+
+  let total;
+  let bookingAmount;
+  let remainingAmount;
+  let paymentMode;
+
+  if (codChosen) {
+    const codCharge = Math.max(0, Math.floor(Number(product.cod_charge) || 0));
+    total = subtotal + shipping + codCharge;
+    bookingAmount = Math.min(total, Math.max(0, Number(product.booking_amount) || 0));
+    remainingAmount = total - bookingAmount;
+    paymentMode = 'COD';
+  } else if (fullChosen) {
+    total = subtotal + shipping;
+    bookingAmount = total;
+    remainingAmount = 0;
+    paymentMode = 'FULL';
+  } else {
+    total = subtotal + shipping;
+    bookingAmount = Math.min(total, Math.max(0, Number(product.booking_amount) || 0) * quantity);
+    remainingAmount = bookingAmount > 0 ? total - bookingAmount : 0;
+    paymentMode = bookingAmount > 0 ? 'BOOKING' : 'FULL';
+  }
 
   const customer = await customerService.saveDetails(key, draft);
   const orderId = await nextOrderId();
@@ -86,7 +120,7 @@ async function create(phone, draft) {
         total,
         booking_amount: bookingAmount,
         remaining_amount: remainingAmount,
-        payment_mode: bookingAmount > 0 ? 'BOOKING' : 'FULL',
+        payment_mode: paymentMode,
         brand: product.brand || null,
       })
       .select('*')

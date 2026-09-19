@@ -278,6 +278,23 @@ async function productReport() {
 const priceOf = (product) => Math.max(0, Math.round(Number(product.price) || 0));
 
 /**
+ * Which products ask "Full ya COD?" at checkout.
+ *
+ * NOT the same question as `product.cod_available` - that flag already sat
+ * true on Spider-Man and Venom before this feature existed, set from the
+ * admin panel for the older, simpler "COD available hai?" FAQ answer (see
+ * faq.js's 'cod' case). Gating the checkout choice on that same flag put the
+ * whole Full/COD flow in front of customers buying a T-shirt, with whatever
+ * numbers that flag happened to carry - never asked for and never tested for
+ * those products.
+ *
+ * Scoped by code rather than by flag until the owner asks for it more
+ * broadly: a second product wants it, add its code here.
+ */
+const PAYMENT_CHOICE_CODES = new Set(['3PC-BAG-ELITE']);
+const offersPaymentChoice = (product) => Boolean(product && PAYMENT_CHOICE_CODES.has(product.code));
+
+/**
  * The picture of this thing, if the shop actually has one.
  *
  * Resolved here rather than anywhere near the model: a path comes out of the
@@ -526,6 +543,7 @@ module.exports = {
   stockReport,
   productReport,
   priceOf,
+  offersPaymentChoice,
   imageFor,
   resolveImage,
   imagesFor,

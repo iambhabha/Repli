@@ -100,4 +100,43 @@ async function recentHistory(phone, limit = 6) {
     .map((row) => `${row.direction === 'INCOMING' ? 'customer' : 'shop'}: ${String(row.text || '').replace(/\s+/g, ' ').slice(0, 200)}`);
 }
 
-module.exports = { claimIncoming, recordOutgoing, recentOutgoing, recentHistory };
+/**
+ * The same transcript, in the shape a chat model wants.
+ *
+ * recentHistory() flattens the conversation into "customer: ..." lines inside
+ * one prompt, which is right for a single-shot call being asked to classify
+ * something. The agent is not classifying - it is continuing a conversation,
+ * and a model continues a conversation far better when the turns arrive as
+ * turns. INCOMING becomes `user`, OUTGOING becomes `assistant`.
+ *
+ * Media rows carry no text, so they are described rather than dropped: a gap
+ * where the customer sent a screenshot would make the reply above it read as
+ * an answer to nothing.
+ */
+async function recentTurns(phone, limit = 20) {
+  const key = config.normalisePhone(phone);
+  if (!key) return [];
+  const { data, error } = await supabase
+    .from('messages')
+    .select('direction,text,message_type')
+    .eq('phone', key)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    logger.warn('messages.recent_turns_failed', { phone: key, error: error.message });
+    return [];
+  }
+
+  return (data || [])
+    .reverse()
+    .map((row) => {
+      const incoming = row.direction === 'INCOMING';
+      const body = String(row.text || '').trim();
+      const content = body || (row.message_type === 'media' ? '[sent an image]' : '');
+      return content ? { role: incoming ? 'user' : 'assistant', content } : null;
+    })
+    .filter(Boolean);
+}
+
+module.exports = { claimIncoming, recordOutgoing, recentOutgoing, recentHistory, recentTurns };

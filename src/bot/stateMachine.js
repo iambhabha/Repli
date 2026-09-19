@@ -707,6 +707,12 @@ async function tryImageRequest(bot, phone, convo, text, product = null) {
  */
 /** Where the conversation is, in the plain words the model is given. */
 function phaseOf(convo) {
+  // Same state as the summary, but a different question is on screen - the
+  // brain needs to know which one it is actually answering.
+  if (convo.state === STATES.ORDER_SUMMARY && convo.data && convo.data.awaitingPaymentMode) {
+    return 'choosing between paying in full now or Cash on Delivery with a small advance';
+  }
+
   switch (convo.state) {
     case STATES.SELECT_CATEGORY:
       return 'choosing a department';
@@ -1385,6 +1391,28 @@ async function handleShortStock(bot, phone, convo, draft, available) {
   return 'out_of_stock';
 }
 
+/**
+ * "paisa kahan bhejun?" - the one question WAITING_FOR_PAYMENT exists to
+ * answer.
+ *
+ * The instructions and the scanner went out when the order was created, and
+ * by the time somebody has scrolled up, opened their UPI app and come back,
+ * that message is often several screens away. Asked again, the shop should
+ * simply send it again.
+ *
+ * It went to the model instead, which cannot send the QR and has no UPI id
+ * it is allowed to state, so the best it could manage was "could you clarify
+ * what you mean by Scanner?" to a customer standing in front of their UPI
+ * app. Sending the real thing costs nothing and is the actual answer.
+ */
+async function resendPaymentDetails(bot, phone, order) {
+  const asked = await paymentService.paymentQrImage().catch(() => null);
+  await bot.sendMessage(phone, bot.t.paymentInstructions(order, { scanner: Boolean(asked) }));
+  if (asked) await bot.sendImage(phone, asked, '');
+  logger.info('payment.details_resent', { phone, action: order.order_id });
+  return 'payment_details_resent';
+}
+
 async function createOrderAndAskPayment(bot, phone, convo) {
   const draft = await buildDraft(convo);
   if (!draft) {
@@ -1397,7 +1425,26 @@ async function createOrderAndAskPayment(bot, phone, convo) {
     return handleShortStock(bot, phone, convo, draft, available);
   }
 
-  const order = await orderService.create(phone, draft);
+  /**
+   * "Full ya COD?" - asked once, before the order exists, for a product that
+   * actually offers COD. Nothing is created yet: the amounts on the order
+   * depend on which one they pick, so the order has to wait for the answer.
+   *
+   * Checked against `convo.data.paymentMode` rather than re-asking every
+   * time this function runs: the reply handler in handleMessage sets it and
+   * calls back in here, and that second pass must fall straight through to
+   * creating the order instead of asking the same question again.
+   */
+  if (productService.offersPaymentChoice(draft.product) && !(convo.data && convo.data.paymentMode)) {
+    await bot.sendMessage(phone, bot.t.paymentModeChoice(draft.product), { raw: true });
+    await conversationService.save(phone, {
+      data: { ...convo.data, awaitingPaymentMode: true },
+    });
+    return 'payment_mode_asked';
+  }
+
+  const paymentMode = (convo.data && convo.data.paymentMode) || null;
+  const order = await orderService.create(phone, draft, { paymentMode });
 
   /**
    * The booking number and the scanner go out together.
@@ -1414,7 +1461,13 @@ async function createOrderAndAskPayment(bot, phone, convo) {
    * who has already paid is shown the QR again - that was the case worth
    * protecting, and it is checked rather than assumed.
    */
-  await bot.sendMessage(phone, bot.t.paymentInstructions(order, { scanner: await hasScanner() }));
+  const instructions =
+    order.payment_mode === 'COD'
+      ? bot.t.codPaymentInstructions(order, { scanner: await hasScanner() })
+      : order.payment_mode === 'FULL' && productService.offersPaymentChoice(draft.product)
+        ? bot.t.fullPaymentInstructions(order, { scanner: await hasScanner() })
+        : bot.t.paymentInstructions(order, { scanner: await hasScanner() });
+  await bot.sendMessage(phone, instructions);
 
   if (String(order.payment_status || '').toLowerCase() !== 'paid') {
     const scanner = await paymentService.paymentQrImage().catch(() => null);
@@ -1423,7 +1476,7 @@ async function createOrderAndAskPayment(bot, phone, convo) {
   await conversationService.save(phone, {
     state: STATES.WAITING_FOR_PAYMENT,
     current_order_id: order.id,
-    data: { ...convo.data, awaiting: null },
+    data: { ...convo.data, awaiting: null, paymentMode: null, awaitingPaymentMode: null },
   });
 
   if (!paymentService.isPaymentLinkConfigured()) {
@@ -2083,6 +2136,12 @@ const runDecision = createExecutor({
   editDetails,
   buildDraft,
   createOrder: createOrderAndAskPayment,
+  resendPaymentDetails: async (bot, phone, convo) => {
+    const order =
+      (await orderService.getById(convo.current_order_id)) || (await orderService.openFor(phone));
+    if (!order) return null;
+    return resendPaymentDetails(bot, phone, order);
+  },
   cancelOrder: async (bot, phone) => {
     await orderService.cancelOpen(phone);
     await conversationService.save(
@@ -2261,6 +2320,27 @@ async function handleMessage(bot, msg) {
         }
         return applyChartNumber(bot, phone, convo, product, picked);
       }
+    }
+  }
+
+  /**
+   * "1" / "2" for "Full ya COD?" - a bare index into the two-item choice the
+   * shop just asked, in createOrderAndAskPayment. Handled the same way every
+   * other bare number in this file is: read as an index, not sent to the
+   * brain - see isMenuNumber below, which skips the brain for exactly this
+   * reason. Anything that is not a bare number is deliberately left alone
+   * here and reaches the brain instead, a few lines down: reading what "cash
+   * pe le lunga" or "poora bhej deta hoon" actually means is exactly the
+   * kind of sentence this shop stopped matching with regexes for.
+   */
+  if (convo.data && convo.data.awaitingPaymentMode && parser.isBareNumber(text)) {
+    const mode = text.trim() === '1' ? 'FULL' : text.trim() === '2' ? 'COD' : null;
+    if (mode) {
+      await conversationService.save(phone, {
+        data: { ...convo.data, paymentMode: mode, awaitingPaymentMode: null },
+      });
+      const fresh = await conversationService.get(phone);
+      return createOrderAndAskPayment(bot, phone, fresh);
     }
   }
 
@@ -2460,6 +2540,38 @@ async function handleMessage(bot, msg) {
     convo.data = rest;
 
     if (parser.isYes(text)) return applySwitch(bot, phone, convo, pending);
+  }
+
+  /**
+   * The brain gets first look at "Full ya COD?" - see select_payment_mode
+   * in ai/brain.js - and reaching here means it either was not available
+   * (no key, no budget, a timeout) or read the sentence and still was not
+   * sure. Only then does a plain word match take over, exactly the same
+   * relationship every other fallback in this file has to the brain above
+   * it: a safety net, not the first opinion.
+   */
+  if (convo.data && convo.data.awaitingPaymentMode) {
+    const mode = parser.detectPaymentMode(text);
+    if (mode) {
+      await conversationService.save(phone, {
+        data: { ...convo.data, paymentMode: mode, awaitingPaymentMode: null },
+      });
+      const fresh = await conversationService.get(phone);
+      return createOrderAndAskPayment(bot, phone, fresh);
+    }
+  }
+
+  /**
+   * Same relationship, for "scanner"/"QR"/"UPI" - see resend_payment_details
+   * in ai/brain.js. The brain already had first look above; a customer
+   * reaching here asked for the scanner in words it did not recognise as
+   * that, or the call itself failed. Either way the answer is still owed,
+   * so the fixed word list from before this decision existed takes over.
+   */
+  if (convo.state === STATES.WAITING_FOR_PAYMENT && parser.asksWhereToPay(text)) {
+    const order =
+      (await orderService.getById(convo.current_order_id)) || (await orderService.openFor(phone));
+    if (order) return resendPaymentDetails(bot, phone, order);
   }
 
   const settlingUp =
@@ -2704,26 +2816,11 @@ async function handleMessage(bot, msg) {
         return 'restart_missing_order';
       }
 
-      /**
-       * "paisa kahan bhejun?" - the one question this step exists to answer.
-       *
-       * The instructions and the scanner went out when the order was
-       * created, and by the time somebody has scrolled up, opened their UPI
-       * app and come back, that message is often several screens away. Asked
-       * again, the shop should simply send it again.
-       *
-       * It went to the model instead, which cannot send the QR and has no
-       * UPI id it is allowed to state, so the best it could manage was a
-       * paraphrase of "please pay". Sending the real thing costs nothing and
-       * is the actual answer.
-       */
-      if (parser.asksWhereToPay(text)) {
-        const asked = await paymentService.paymentQrImage().catch(() => null);
-        await bot.sendMessage(phone, bot.t.paymentInstructions(order, { scanner: Boolean(asked) }));
-        if (asked) await bot.sendImage(phone, asked, '');
-        logger.info('payment.details_resent', { phone, action: order.order_id });
-        return 'payment_details_resent';
-      }
+      // "scanner"/"QR"/"UPI" is caught above this switch now - the brain
+      // gets first look (resend_payment_details), then the word-list
+      // fallback. Reaching this state with that same text unhandled
+      // should not happen, but resending costs nothing if it does.
+      if (parser.asksWhereToPay(text)) return resendPaymentDetails(bot, phone, order);
 
       const browsed = await tryBrowseWhilePaying(bot, phone, text, order);
       if (browsed) return browsed;

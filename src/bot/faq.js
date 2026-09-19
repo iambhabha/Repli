@@ -20,6 +20,7 @@ const cache = require('../db/cache');
 const config = require('../config');
 const logger = require('../logger');
 const productService = require('../services/productService');
+const { STATES } = require('../services/conversationService');
 
 const FACT_KEYS = [
   'location_city',
@@ -98,7 +99,16 @@ async function answer(topic, { pack, convo, subject }) {
 
     case 'price':
       // No catalogue, no price. Silence here beats a made-up number.
-      return product ? pack.priceAnswer(product) : null;
+      if (!product) return null;
+      /**
+       * The Bag's price answer is the owner's exact promo copy, word for
+       * word - not a fact for the rewriter to paraphrase into something
+       * that reads more naturally. Marked raw so tryAnswer sends it exactly
+       * as written, the same way an admin's own words are never rewritten.
+       */
+      return productService.offersPaymentChoice(product)
+        ? { text: pack.priceAnswer(product), raw: true }
+        : pack.priceAnswer(product);
 
     case 'material':
       // Only T-shirts have a described fabric; hoodies are special orders.
@@ -107,6 +117,19 @@ async function answer(topic, { pack, convo, subject }) {
         : null;
 
     case 'waiting': {
+      /**
+       * "kitna time lagega" means two different things depending on where
+       * they are: browsing, it is asking about production lead time; with a
+       * payment already sent, it is asking why nothing has been confirmed
+       * yet. Answering the second with the first - a lead time for making the
+       * garment - ignores what they actually asked and states no real ETA,
+       * because verification has none to give. An apology does.
+       */
+      const settlingUp =
+        convo &&
+        (convo.state === STATES.WAITING_FOR_PAYMENT || convo.state === STATES.PAYMENT_VERIFYING);
+      if (settlingUp) return pack.verificationDelayAnswer();
+
       const lead = isHoodie ? stored.hoodie_lead_time : stored.tshirt_lead_time;
       return lead ? pack.waitingTimeAnswer(lead) : null;
     }
@@ -139,9 +162,15 @@ async function answer(topic, { pack, convo, subject }) {
  */
 async function tryAnswer(bot, phone, topic, { pack, convo, subject }) {
   try {
-    const text = await answer(topic, { pack, convo, subject });
+    const result = await answer(topic, { pack, convo, subject });
+    if (!result) return false;
+    // A plain string is rewritten like every other FAQ answer; { text, raw }
+    // is exact copy that must reach the customer untouched - see the
+    // 'price' case above for why.
+    const raw = typeof result === 'object';
+    const text = raw ? result.text : result;
     if (!text) return false;
-    await bot.sendMessage(phone, text);
+    await bot.sendMessage(phone, text, raw ? { raw: true } : undefined);
     logger.info('faq.answered', { phone, action: topic });
     return true;
   } catch (err) {

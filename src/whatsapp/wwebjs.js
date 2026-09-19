@@ -115,7 +115,10 @@ module.exports = function wwebjsDriver() {
       setTimeout(() => {
         page
           .evaluate(run)
-          .then(() => logger.info('whatsapp.attach_done', {}))
+          .then(() => {
+            msgHooked = true;
+            logger.info('whatsapp.attach_done', {});
+          })
           .catch((err) =>
             logger.error('whatsapp.attach_failed', {
               error: String((err && err.message) || err),
@@ -128,6 +131,21 @@ module.exports = function wwebjsDriver() {
 
   let client = null;
   let connected = false;
+  /**
+   * Whether an incoming message can actually reach Node - not the same
+   * thing as `connected`.
+   *
+   * 'ready' set `connected = true` on its own timing, and the watchdog below
+   * used to check that same flag before trying its own Msg.on('add') hook.
+   * On a fast session restore 'ready' fires well inside the watchdog's
+   * twelve seconds, so by the time the watchdog looked, connected was
+   * already true - and it skipped hooking entirely, even on a run where the
+   * primary attach had already logged attach_missed moments earlier. The
+   * bot printed "Repli connected" and never received another message,
+   * because nothing had actually asked WhatsApp Web to call Node when one
+   * arrived. This flag tracks the thing that actually matters.
+   */
+  let msgHooked = false;
   let handler = () => {};
 
   /**
@@ -645,7 +663,9 @@ module.exports = function wwebjsDriver() {
        * listener so messages still reach Node, then mark connected.
        */
       setTimeout(() => {
-        if (connected) return;
+        // Guarded on whether a message can actually get through, not on
+        // whether 'ready' already fired - see msgHooked's own comment.
+        if (msgHooked) return;
         const page = client && client.pupPage;
         if (page) {
           page
@@ -667,7 +687,10 @@ module.exports = function wwebjsDriver() {
               window.__repliMsgHooked = true;
               return 'hooked';
             })
-            .then((how) => logger.info('whatsapp.msg_hook', { action: how }))
+            .then((how) => {
+              msgHooked = true;
+              logger.info('whatsapp.msg_hook', { action: how });
+            })
             .catch((err) =>
               logger.warn('whatsapp.msg_hook_failed', {
                 error: String((err && err.message) || err),

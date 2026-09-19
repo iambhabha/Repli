@@ -12,8 +12,7 @@
 const config = require('../config');
 const logger = require('../logger');
 const messages = require('./messages');
-const language = require('./language');
-const stateMachine = require('./stateMachine');
+const agent = require('../agent');
 const settingsService = require('../services/settingsService');
 const bypassService = require('../services/bypassService');
 const conversationService = require('../services/conversationService');
@@ -206,24 +205,17 @@ function createRouter(bot) {
         let action;
 
         /**
-         * Answer in the language the customer wrote in.
+         * No language is decided here any more.
          *
-         * Sticky: decided from the first message that carries a signal and
-         * kept afterwards, because "ok" / "yes" / "M" look identical in both
-         * languages and a per-message detector would flip mid-chat.
+         * A detector used to run every turn and pin the conversation to one
+         * language so the right template file could be loaded. There are no
+         * template files now: the agent reads the transcript and answers in
+         * whatever the customer is actually writing, switching with them if
+         * they switch. One fewer decision, and one fewer model call.
          */
-        const lang = await language.resolveSmart(
-          before.data && before.data.lang,
-          msg.isMedia ? '' : msg.text
-        );
         const localBot = Object.create(bot);
-        localBot.t = messages.for(lang);
-        // Read back by the adapter when it rewrites a reply, so the first
-        // message of a conversation is rewritten in the language we just
-        // decided rather than the one saved at the end of the turn.
-        localBot.lang = lang;
-        // The sender's WhatsApp profile name, for the steps that would
-        // otherwise ask for something WhatsApp already told us.
+        // The sender's WhatsApp profile name, so the agent need not ask for
+        // something WhatsApp already told us.
         localBot.pushName = msg.pushName || '';
 
         if (isAdmin) {
@@ -234,16 +226,11 @@ function createRouter(bot) {
         } else if (before.mode === conversationService.MODE.HUMAN) {
           action = 'human_mode'; // a person owns this conversation
         } else {
-          action = await stateMachine.handleMessage(localBot, msg);
+          action = await agent.handleMessage(localBot, { ...msg, phone });
         }
 
         const after = await conversationService.get(phone);
 
-        // Written after the turn on purpose: "menu" and "cancel" reset the
-        // conversation's scratch pad, and the language must survive that.
-        if (!isAdmin && after.data && after.data.lang !== lang) {
-          await conversationService.save(phone, { data: { ...after.data, lang } });
-        }
         logger.turn({
           phone,
           messageId: msg.id,

@@ -345,6 +345,19 @@ Available sizes:
 {{remaining}} once the piece is ready`,
   },
   {
+    key: 'availableCod',
+    category: 'product',
+    label: 'In stock, ask quantity (COD product)',
+    description: 'Same moment as "available", but for a product where full/COD is chosen at checkout - the advance-now/balance-later split does not apply here.',
+    placeholders: ['item', 'price'],
+    hi: `{{item}} — done ✅
+
+{{price}} total — payment ke time Full payment ya Cash on Delivery mein se choose kar sakte ho.`,
+    en: `{{item}} — done ✅
+
+{{price}} total — you can choose Full payment or Cash on Delivery at checkout.`,
+  },
+  {
     key: 'outOfStock',
     category: 'product',
     label: 'Out of stock (other sizes left)',
@@ -882,6 +895,78 @@ Total: {{total}}
 Please send the screenshot here once you have paid 🙏`,
   },
   {
+    key: 'paymentModeChoice',
+    category: 'payment',
+    label: 'Full payment or COD?',
+    description: 'Sent instead of paymentInstructions when the product offers COD - asks which way they want to pay before the order is created.',
+    placeholders: ['item', 'fullPrice', 'codAdvance', 'codRemaining', 'codTotal'],
+    hi: `{{item}} ke liye kaise pay karna chahenge?
+
+1️⃣ Full Payment — {{fullPrice}} abhi
+2️⃣ Cash on Delivery — {{codAdvance}} advance abhi, baaki {{codRemaining}} delivery ke time cash (COD total {{codTotal}})
+
+Reply karein 1 ya 2 se 🙏`,
+    en: `How would you like to pay for the {{item}}?
+
+1️⃣ Full Payment — {{fullPrice}} now
+2️⃣ Cash on Delivery — {{codAdvance}} advance now, remaining {{codRemaining}} in cash on delivery (COD total {{codTotal}})
+
+Please reply with 1 or 2 🙏`,
+  },
+  {
+    key: 'fullPaymentInstructions',
+    category: 'payment',
+    label: 'Payment link (full payment chosen)',
+    description: 'Sent when the customer chose to pay the full amount now.',
+    placeholders: ['orderId', 'total', 'payTo'],
+    hi: `Booking #{{orderId}} 🙌
+
+Total: {{total}} — poora abhi bhej dena.
+
+{{payTo}}
+
+Payment ke baad screenshot yahin bhej dena — verify karke booking confirm kar dunga.`,
+    en: `Booking #{{orderId}} 🙌
+
+Total: {{total}} — please pay the full amount now.
+
+{{payTo}}
+
+Send the screenshot here after paying — I'll verify it and confirm your booking.`,
+  },
+  {
+    key: 'codPaymentInstructions',
+    category: 'payment',
+    label: 'Payment link (COD chosen)',
+    description: 'Sent when the customer chose Cash on Delivery - the advance is due now, the rest in cash at delivery.',
+    placeholders: ['orderId', 'advance', 'remaining', 'payTo'],
+    hi: `Booking #{{orderId}} 🙌
+
+Booking confirm karne ke liye abhi dena hai: {{advance}}
+Baaki {{remaining}} cash on delivery ke time dena hoga.
+
+{{payTo}}
+
+Payment ke baad screenshot yahin bhej dena — verify karke booking confirm kar dunga.`,
+    en: `Booking #{{orderId}} 🙌
+
+To confirm your booking, pay now: {{advance}}
+The remaining {{remaining}} is paid in cash when it's delivered.
+
+{{payTo}}
+
+Send the screenshot here after paying — I'll verify it and confirm your booking.`,
+  },
+  {
+    key: 'verificationDelayAnswer',
+    category: 'payment',
+    label: 'Verification is taking a while',
+    description: 'Asked "kitna time lagega" while waiting for payment to be verified - apologise and cite high traffic, never a made-up ETA.',
+    placeholders: [],
+    hi: `Bhai thoda time lag raha hai - customers zyada hain aur traffic high hai isliye. Aapki asuvidha ke liye khed hai 🙏 Verify hote hi confirm kar denge.`,
+    en: `It's taking a little longer than usual - we have high customer traffic right now. Sorry for the inconvenience 🙏 We'll confirm as soon as it's verified.`,
+  },
+  {
     key: 'paymentProofReceived',
     category: 'payment',
     label: 'Screenshot received',
@@ -1096,6 +1181,43 @@ Please hold on 🙏`,
 {{remaining}} remaining once it's ready.`,
   },
   {
+    key: 'priceAnswerBag',
+    category: 'faq',
+    label: 'Price asked - Bag (special offer)',
+    description: 'Bag price question - the owner\'s exact promo copy, not the booking/remaining split, which does not describe how the Bag is actually paid for (see paymentModeChoice).',
+    placeholders: [],
+    hi: `🔥 **SPECIAL OFFER** 🔥
+
+🎒 **ANY BAG @ ₹2,599**
+From **ELITE & ELITE PRO SERIES** 💎
+
+🎁 Accessories worth **₹799 FREE**
+🧦 FREE Socks
+🔑 FREE Keychain
+🚚 FREE Shipping — All India 🇮🇳
+
+💯 **LESS PRICE THAN ANYONE — GUARANTEED**
+
+₹2,599 mein **premium bag + ₹799 worth accessories + free shipping** 😮‍💨🔥
+
+Limited offer — BOOK FAST`,
+    en: `🔥 **SPECIAL OFFER** 🔥
+
+🎒 **ANY BAG @ ₹2,599**
+From **ELITE & ELITE PRO SERIES** 💎
+
+🎁 Accessories worth **₹799 FREE**
+🧦 FREE Socks
+🔑 FREE Keychain
+🚚 FREE Shipping — All India 🇮🇳
+
+💯 **LESS PRICE THAN ANYONE — GUARANTEED**
+
+₹2,599 mein **premium bag + ₹799 worth accessories + free shipping** 😮‍💨🔥
+
+Limited offer — BOOK FAST`,
+  },
+  {
     key: 'bookingProcessAnswer',
     category: 'faq',
     label: 'How do I book? / what is the process?',
@@ -1149,6 +1271,19 @@ I'm letting them know now — they'll get back to you shortly.`,
 
 {{products}}`,
     en: `Which one would you like to see?
+
+{{products}}`,
+  },
+  {
+    key: 'whichOne',
+    category: 'faq',
+    label: 'Price/booking asked, but of what?',
+    description: 'They asked a price/booking/COD question naming a department with more than one design, and no design in their cart - ask which one rather than answering for whatever happens to be in the cart.',
+    placeholders: ['products'],
+    hi: `Konsa design bhai? Ye sab available hain:
+
+{{products}}`,
+    en: `Which one do you mean? These are available:
 
 {{products}}`,
   },

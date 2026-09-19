@@ -76,6 +76,8 @@ const DECISIONS = [
   'select_colour',
   'select_size',
   'select_quantity',
+  'select_payment_mode', // Full or COD - see PHASE, only means anything there
+  'resend_payment_details', // "scanner"/"QR"/"UPI" while a payment is due
   'answer_question',   // a question the shop has a stored answer for
   'collect_details',   // they want to order - start the form
   'edit_details',      // the address on the summary is wrong; take it again
@@ -137,6 +139,24 @@ const SYSTEM = [
   'to SEE pictures. If the department has several designs and they did not',
   'name one, still decide show_image with that category and product null -',
   'the shop will ask which photo. Do not answer a photo request with a menu.',
+  '',
+  'A COLOUR NAMED IS A COLOUR FILLED. Whenever the message names a colour,',
+  'put it in `colour`, whatever the decision is - a photo request, a design',
+  'pick, anything. "black spiderman ki photo bhejo" names both a design and a',
+  'colour: product Spider-Man, colour Black, decision show_image, even though',
+  'the decision itself is about a photo and not a colour pick. Leaving colour',
+  'empty here is exactly as wrong as leaving product empty when they name a',
+  'design - the shop cannot tell a real colour of that design from one it',
+  'does not have unless you report the colour they actually said.',
+  '',
+  'A DEPARTMENT NAMED IS A DEPARTMENT FILLED. The same rule as colour, for',
+  'category. "Bape hoodie price bro" names the hoodie department - category',
+  '"hoodie" - even though it does not name Single or Double and the decision',
+  'is answer_question, not show_products. A price/booking/COD question about',
+  'a department with more than one design is not answered from whatever',
+  'happens to be in the cart; leaving category empty when they clearly named',
+  'one is what forces that wrong guess. Report the department they said,',
+  'always, on every decision - the shop resolves which design from there.',
   '',
   'A FOLLOW-ON CARRIES THE PREVIOUS REQUEST. "bhi", "aur", "uska bhi",',
   '"ye wala bhi" continue what was just asked, they do not start something',
@@ -213,6 +233,8 @@ const SYSTEM = [
   ' colour:   from the colours list only. null if unsure.',
   ' size:     from the sizes list only. null if unsure.',
   ' quantity: a whole number, or null.',
+  ' paymentMode: "FULL" or "COD", or null - only means anything on the',
+  '   full-vs-COD PHASE below.',
   ` imageKind: ${IMAGE_KINDS.join('|')} or null - which photo they asked for.`,
   ' needsClarification: true when more than one thing fits.',
   ' clarification: the question to ask them. null unless needsClarification.',
@@ -251,6 +273,34 @@ const SYSTEM = [
   'do" are. "ruk jao" is not. A wrong yes spends their money on an order',
   'they never agreed to, so when in doubt, ask.',
   '',
+  'FULL OR COD. PHASE says "choosing between paying in full now or Cash on',
+  'Delivery" only when the shop has just asked exactly that, nothing else.',
+  'On that phase alone, read which one they meant and answer',
+  'select_payment_mode with paymentMode "FULL" or "COD" - whatever words they',
+  'used: "cash pe le lunga", "poora abhi bhej deta hoon", "COD", "advance mat',
+  'lo poora hi de deta hoon", "delivery pe denge", "1", "full". This is the',
+  'one place paymentMode ever means anything; leave it null everywhere else,',
+  'the same way colour and size stay null off their own steps.',
+  '',
+  'BUT NOT WHEN THEY ASKED SOMETHING ELSE. On that same phase, a real',
+  'question - a price, a photo, another design - is not an attempt to answer',
+  'Full/COD and must not be forced into paymentMode or needsClarification',
+  'about it. "Hoodie ka price batao" while the shop is waiting on Full/COD is',
+  'ask_price -> answer_question, read exactly as it would be read anywhere',
+  'else. The Full/COD question is still open and will still be there once',
+  'this one is answered; talking over it by re-asking Full/COD instead of',
+  "answering what they actually asked is the mistake this exists to prevent.",
+  '',
+  'THE SCANNER, WHILE A PAYMENT IS DUE. PHASE says "waiting for the payment',
+  'screenshot" when an order has been created and is unpaid. On that phase,',
+  '"scanner", "QR", "UPI", "kaha bhejun", "payment link bhejo", "kaise pay',
+  'karu" -> resend_payment_details, every time, however it is worded. You',
+  'cannot state a UPI id or send an image yourself - do not try to answer',
+  'this in reply or clarification. A real customer typing "Scanner" while',
+  'standing in their UPI app was once asked to clarify what they meant by',
+  'it; resend_payment_details exists so that never happens again. Off this',
+  'one phase the same word can mean something else - ignore it there.',
+  '',
   'A GREETING IS THE ONE THING YOU DO NOT ANSWER. "hi", "hello", "namaste",',
   '"hy" -> decision "continue" with reply "". The shop opens with its own',
   'welcome and its own department menu, which name the brands and list what',
@@ -282,7 +332,7 @@ function validate(raw, { categories, designs, colours, sizes, facts }) {
     return { reason: 'not_an_object' };
   }
 
-  for (const field of ['intent', 'decision', 'confidence']) {
+  for (const field of ['intent', 'decision']) {
     if (parsed[field] === undefined) return { reason: `missing_${field}` };
   }
 
@@ -301,9 +351,25 @@ function validate(raw, { categories, designs, colours, sizes, facts }) {
    */
   const language = parsed.language === 'hi' || parsed.language === 'en' ? parsed.language : null;
 
-  const confidence = Number(parsed.confidence);
-  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
-    return { reason: 'bad_confidence' };
+  /**
+   * Same reasoning as language, one field down.
+   *
+   * confidence feeds a single `conf=0.90` in the log line and gates nothing -
+   * grep the codebase and that is the only place it is read. A live trace
+   * showed the model name Spider-Man AND Black correctly, decide show_image,
+   * and leave confidence out of the object entirely; the whole decision was
+   * thrown away and the customer got a menu instead of the photo they asked
+   * for, over a number nothing downstream uses. Missing defaults to 1 - the
+   * model did not hedge, so nothing here should hedge for it. A value that IS
+   * present and malformed still rejects, same as before: that is the model
+   * failing to follow the format, not a field it chose to omit.
+   */
+  let confidence = 1;
+  if (parsed.confidence !== undefined) {
+    confidence = Number(parsed.confidence);
+    if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+      return { reason: 'bad_confidence' };
+    }
   }
 
   /** Off the supplied list means rejected, never corrected. */
@@ -324,6 +390,9 @@ function validate(raw, { categories, designs, colours, sizes, facts }) {
   if (!size.ok) return { reason: 'bad_size' };
   const imageKind = fromList(parsed.imageKind, IMAGE_KINDS);
   if (!imageKind.ok) return { reason: 'bad_image_kind' };
+
+  const paymentMode = fromList(parsed.paymentMode, ['FULL', 'COD']);
+  if (!paymentMode.ok) return { reason: 'bad_payment_mode' };
 
   let quantity = null;
   if (parsed.quantity !== null && parsed.quantity !== undefined && parsed.quantity !== '') {
@@ -458,6 +527,7 @@ function validate(raw, { categories, designs, colours, sizes, facts }) {
         colour: colour.value,
         size: size.value,
         quantity,
+        paymentMode: paymentMode.value,
       },
       imageKind: imageKind.value,
       needsClarification,
@@ -509,76 +579,92 @@ async function decide({
   const categoryKeys = categories.map((c) => c.key);
   let accepted = null;
 
-  const answer = await client.complete({
-    purpose: 'brain',
-    phone,
-    system: SYSTEM,
-    json: true,
-    /**
-     * Zero, because this is a decision and not a piece of writing.
-     *
-     * At 0.2 the same sentence produced different decisions on different
-     * turns - a question about fabric read as browsing once and as a
-     * question the next time, which moved a customer out of the size step
-     * they were on. A shop that behaves differently each time you say the
-     * same thing is worse than one that is rigid.
-     */
-    temperature: 0,
-    maxTokens: 260,
-    user: [
-      'FACTS (only these may be stated):',
-      facts,
+  /**
+   * One retry, on the exact same prompt.
+   *
+   * Temperature 0 is not a promise of the same output twice - a live
+   * customer's message came back `bad_intent` once, was retried by hand a
+   * moment later, and the second attempt correctly noticed their colour did
+   * not exist and asked which design they meant instead. Without this the
+   * whole turn drops to the keyword fallback, which cannot compose an
+   * answer like that at all - it answers one topic per message and had
+   * nothing to say about the colour. A malformed reply from the model is
+   * still cheaper to retry than a customer being told less than the shop
+   * actually knows.
+   */
+  let answer = null;
+  for (let attempt = 0; attempt < 2 && !answer; attempt += 1) {
+    answer = await client.complete({
+      purpose: 'brain',
+      phone,
+      system: SYSTEM,
+      json: true,
       /**
-       * Which colour belongs to which design.
+       * Zero, because this is a decision and not a piece of writing.
        *
-       * The lists used to go out flat - every design on one line, every
-       * colour in the shop on another - and nothing said they were related.
-       * Asked about "Red" the brain answered design Venom, which is the
-       * black shirt; Red is the Spider-Man. It was not guessing carelessly,
-       * it had been handed two lists and no way to pair them.
+       * At 0.2 the same sentence produced different decisions on different
+       * turns - a question about fabric read as browsing once and as a
+       * question the next time, which moved a customer out of the size step
+       * they were on. A shop that behaves differently each time you say the
+       * same thing is worse than one that is rigid.
        */
-      pairs.length ? 'WHAT EACH DESIGN COMES IN:\n' + pairs.join('\n') : '',
-      `ONLY these names: designs ${designs.join(', ') || 'none'}` +
-        (colours.length ? ` | colours ${colours.join(', ')}` : '') +
-        (sizes.length ? ` | sizes ${sizes.join(',')}` : '') +
-        (categoryKeys.length ? ` | categories ${categoryKeys.join(',')}` : ''),
-      `PHASE: ${phase}${language ? ` | already speaking ${language}` : ''}`,
-      chosen ? `ALREADY CHOSEN: ${chosen}` : '',
-      /**
-       * The list on their screen, and what it means, in the same breath.
-       *
-       * The rule for this lived far up in the standing instructions and lost
-       * every time: a customer looking at the bag list said "red wala
-       * chahiye" and was handed a Spider-Man T-shirt, because that shirt is
-       * the red one in the catalogue. The context was correct - the bag was
-       * the only thing shown - so the fix is not more context but the rule
-       * standing next to it, where it cannot be outweighed by a paragraph
-       * about something else.
-       */
-      shown.length
-        ? `LAST SHOWN TO THEM, in order: ${shown.join(', ')}
+      temperature: 0,
+      maxTokens: 260,
+      user: [
+        'FACTS (only these may be stated):',
+        facts,
+        /**
+         * Which colour belongs to which design.
+         *
+         * The lists used to go out flat - every design on one line, every
+         * colour in the shop on another - and nothing said they were related.
+         * Asked about "Red" the brain answered design Venom, which is the
+         * black shirt; Red is the Spider-Man. It was not guessing carelessly,
+         * it had been handed two lists and no way to pair them.
+         */
+        pairs.length ? 'WHAT EACH DESIGN COMES IN:\n' + pairs.join('\n') : '',
+        `ONLY these names: designs ${designs.join(', ') || 'none'}` +
+          (colours.length ? ` | colours ${colours.join(', ')}` : '') +
+          (sizes.length ? ` | sizes ${sizes.join(',')}` : '') +
+          (categoryKeys.length ? ` | categories ${categoryKeys.join(',')}` : ''),
+        `PHASE: ${phase}${language ? ` | already speaking ${language}` : ''}`,
+        chosen ? `ALREADY CHOSEN: ${chosen}` : '',
+        /**
+         * The list on their screen, and what it means, in the same breath.
+         *
+         * The rule for this lived far up in the standing instructions and lost
+         * every time: a customer looking at the bag list said "red wala
+         * chahiye" and was handed a Spider-Man T-shirt, because that shirt is
+         * the red one in the catalogue. The context was correct - the bag was
+         * the only thing shown - so the fix is not more context but the rule
+         * standing next to it, where it cannot be outweighed by a paragraph
+         * about something else.
+         */
+        shown.length
+          ? `LAST SHOWN TO THEM, in order: ${shown.join(', ')}
 ` +
-          'These are on their screen right now, so they are choosing FROM' +
-          ' this list, not asking to see it again. A bare colour, a bare' +
-          ' number, or "red wala" -> select_product on the item from THIS' +
-          ' list, with that colour in selection.colour - even when a design' +
-          ' in another department shares the colour. Never show_products in' +
-          ' answer to a colour: they are already looking at the list, and' +
-          ' sending it a second time answers nothing.'
-        : '',
-      known ? `ALREADY GIVEN: ${known} - never ask again.` : '',
-      history.length ? `RECENT:\n${history.join('\n')}` : '',
-      `CUSTOMER: ${JSON.stringify(message)}`,
-    ]
-      .filter((line) => line !== '')
-      .join('\n'),
-    verify: (raw) => {
-      const result = validate(raw, { categories: categoryKeys, designs, colours, sizes, facts });
-      if (result.reason) return result.reason;
-      accepted = result.value;
-      return null;
-    },
-  });
+            'These are on their screen right now, so they are choosing FROM' +
+            ' this list, not asking to see it again. A bare colour, a bare' +
+            ' number, or "red wala" -> select_product on the item from THIS' +
+            ' list, with that colour in selection.colour - even when a design' +
+            ' in another department shares the colour. Never show_products in' +
+            ' answer to a colour: they are already looking at the list, and' +
+            ' sending it a second time answers nothing.'
+          : '',
+        known ? `ALREADY GIVEN: ${known} - never ask again.` : '',
+        history.length ? `RECENT:\n${history.join('\n')}` : '',
+        `CUSTOMER: ${JSON.stringify(message)}`,
+      ]
+        .filter((line) => line !== '')
+        .join('\n'),
+      verify: (raw) => {
+        const result = validate(raw, { categories: categoryKeys, designs, colours, sizes, facts });
+        if (result.reason) return result.reason;
+        accepted = result.value;
+        return null;
+      },
+    });
+  }
 
   if (!answer || !accepted) return null;
 
@@ -620,6 +706,7 @@ async function decide({
       accepted.selection.product && `design=${accepted.selection.product}`,
       accepted.selection.colour && `colour=${accepted.selection.colour}`,
       accepted.selection.size && `size=${accepted.selection.size}`,
+      accepted.selection.paymentMode && `pay=${accepted.selection.paymentMode}`,
       accepted.imageKind && `img=${accepted.imageKind}`,
       accepted.needsClarification && 'ASKS',
     ]

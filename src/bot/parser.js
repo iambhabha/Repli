@@ -323,6 +323,22 @@ function isBareNumber(text) {
 }
 
 /**
+ * Their answer to "Full payment ya COD?" - the shop just asked exactly one
+ * of two things, so this reads only that, not a general intent.
+ *
+ * @returns {'FULL'|'COD'|null}
+ */
+function detectPaymentMode(text) {
+  const t = normalize(text);
+  if (!t) return null;
+  if (/^1$/.test(t) || /\b(full|prepay|pura|poora|advance nahi|online)\b/.test(t)) return 'FULL';
+  if (/^2$/.test(t) || /\bcod\b/.test(t) || /cash on delivery/.test(t) || /\bcash\b/.test(t)) {
+    return 'COD';
+  }
+  return null;
+}
+
+/**
  * Every word this product answers to.
  *
  * `products.keywords` comes first: that column is edited in the admin panel,
@@ -575,6 +591,7 @@ module.exports = {
   parseQuantity,
   parseMenuIndex,
   isBareNumber,
+  detectPaymentMode,
   detectProductByKeyword,
   detectProductChoice,
   chooseByNumber,

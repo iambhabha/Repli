@@ -126,28 +126,43 @@ module.exports = {
 
   // ---- AI ----------------------------------------------------------------
   //
-  // The AI is a coat of paint, never the brain. Prices, stock, order numbers
-  // and state transitions stay with the rule engine; the model only rewrites
-  // wording and interprets messages the rules could not read. If the key is
-  // missing, the request times out, or the monthly budget runs out, every
-  // caller falls back to the hand-written template and the shop keeps running.
+  // The AI IS the brain now. It reads every customer message, decides what to
+  // look up, calls the tools that read the catalogue and place the order, and
+  // writes the reply itself. What it still cannot do is decide that money
+  // arrived: confirming a payment and moving stock belong to the owner's
+  // /paid, and there is no tool that does either. Without a key the shop has
+  // no customer-facing replies at all - it hands every conversation to a
+  // person rather than guessing.
   OPENAI_API_KEY: String(process.env.OPENAI_API_KEY || '').trim(),
 
   /**
-   * gpt-4o-mini is the deliberate default: on ~5,000 messages a month it costs
-   * roughly ₹150, where a full-size model costs ₹3,000+ for the same traffic.
-   * Override with OPENAI_MODEL if you want to trade money for polish.
+   * gpt-4o, not mini.
+   *
+   * mini was right when the model only reworded a template that the rules had
+   * already chosen - a bad rewrite was a clumsy sentence. It is the wrong
+   * trade now that the model decides which tool to call and what the answer
+   * is: mini drops tool calls and answers from memory instead of from the
+   * catalogue, which is the same "talks about something else entirely" the
+   * rewrite exists to fix. Roughly ₹2,500-4,000 a month at 5,000 messages
+   * against mini's ₹150 - that difference buys the shop being correct.
    */
-  OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o',
   OPENAI_BASE_URL: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
 
   AI_ENABLED: bool(process.env.AI_ENABLED, true),
 
   /** Hard ceiling. Spend crosses it, AI switches itself off until next month. */
-  AI_MONTHLY_BUDGET_INR: Math.max(0, num(process.env.AI_MONTHLY_BUDGET_INR, 1000)),
+  AI_MONTHLY_BUDGET_INR: Math.max(0, num(process.env.AI_MONTHLY_BUDGET_INR, 4000)),
 
-  /** A customer waiting on WhatsApp will not wait long. Late reply > no reply. */
-  AI_TIMEOUT_MS: Math.max(1000, num(process.env.AI_TIMEOUT_MS, 6000)),
+  /**
+   * Per model call, and a turn can make several.
+   *
+   * Six seconds suited one rewrite with a template waiting behind it. A turn
+   * now is think, call a tool, read it, think again - and aborting halfway
+   * leaves the customer with nothing, because there is no template behind it
+   * any more. The customer is shown "typing…" throughout.
+   */
+  AI_TIMEOUT_MS: Math.max(1000, num(process.env.AI_TIMEOUT_MS, 25000)),
 
   /** Only used to show spend in rupees; billing itself is in dollars. */
   AI_USD_TO_INR: Math.max(1, num(process.env.AI_USD_TO_INR, 88)),

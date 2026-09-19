@@ -50,6 +50,37 @@ async function resolveProduct(name) {
 }
 
 /**
+ * A design named alongside a colour that is not actually its own.
+ *
+ * "Black spiderman" names Spider-Man by word - it is the only design that
+ * word matches - but Spider-Man only comes in Red; Black is Venom. Left
+ * alone this sent the Red photos to someone who asked for Black, silently,
+ * with nothing said about the mismatch.
+ *
+ * The fix is not to guess a colour Spider-Man does not have; it is to
+ * recognise that the two words named different products and answer the one
+ * the colour actually belongs to - but only when that is unambiguous. More
+ * than one design in the same department wears that colour and this backs
+ * off, unresolved, exactly as it does when nothing matches at all.
+ */
+async function resolveColourClash(product, colour) {
+  if (!product || !colour) return product;
+
+  const ownColours = await productService.colorsOf(product).catch(() => []);
+  if (ownColours.includes(colour)) return product;
+
+  const siblings = (await productService.activeProducts()).filter(
+    (item) => item.category === product.category && item.id !== product.id
+  );
+  const matches = [];
+  for (const sibling of siblings) {
+    const colours = await productService.colorsOf(sibling).catch(() => []);
+    if (colours.includes(colour)) matches.push(sibling);
+  }
+  return matches.length === 1 ? matches[0] : product;
+}
+
+/**
  * Everything the executor is allowed to touch, and nothing else.
  *
  * Passed in rather than imported so this file cannot reach into the flow on
@@ -72,6 +103,7 @@ function createExecutor(handlers) {
     editDetails,
     buildDraft,
     createOrder,
+    resendPaymentDetails,
   } = handlers;
 
   /**
@@ -93,7 +125,7 @@ function createExecutor(handlers) {
     const chosen = convo.selected_product_id
       ? await productService.getById(convo.selected_product_id).catch(() => null)
       : null;
-    const named = await resolveProduct(selection.product);
+    const named = await resolveColourClash(await resolveProduct(selection.product), selection.colour);
     const subject = named || chosen;
 
     const act = (what) => {
@@ -600,6 +632,40 @@ function createExecutor(handlers) {
       }
 
       /**
+       * "Full ya COD?" - answered.
+       *
+       * Only real once the shop actually asked: `awaitingPaymentMode` is set
+       * in createOrderAndAskPayment the moment it sends that question, and
+       * nowhere else, so a paymentMode the brain read from some other
+       * message - there is no other message it could mean anything on, see
+       * the PHASE guard in ai/brain.js - still cannot act here without the
+       * flag confirming the shop actually asked.
+       */
+      case 'select_payment_mode': {
+        if (!(convo.data && convo.data.awaitingPaymentMode) || !selection.paymentMode) return null;
+        await conversationService.save(phone, {
+          data: { ...convo.data, paymentMode: selection.paymentMode, awaitingPaymentMode: null },
+        });
+        const fresh = await conversationService.get(phone);
+        act(selection.paymentMode);
+        return createOrder(bot, phone, fresh);
+      }
+
+      /**
+       * "scanner"/"QR"/"UPI" - resend the real thing, never a paraphrase.
+       *
+       * Gated on the state, not just the brain's word: PHASE only says this
+       * in WAITING_FOR_PAYMENT, but the gate is checked here too, the same
+       * as confirm_order checks ORDER_SUMMARY, so a decision this file
+       * cannot execute is dropped rather than acted on.
+       */
+      case 'resend_payment_details': {
+        if (convo.state !== STATES.WAITING_FOR_PAYMENT) return null;
+        act();
+        return resendPaymentDetails(bot, phone, convo);
+      }
+
+      /**
        * They do not want it as it stands.
        *
        * Nothing is cancelled and nothing is deleted - the order does not
@@ -622,6 +688,35 @@ function createExecutor(handlers) {
        */
       case 'answer_question': {
         if (!decision.question) return null;
+
+        /**
+         * A price/booking/COD question that named a DEPARTMENT, not a
+         * design, with more than one design in it.
+         *
+         * `subject` falls back to `chosen` - the cart item - when nothing
+         * more specific was named, and that is right when they genuinely
+         * asked nothing about a design at all ("kitne din lagenge?"). It is
+         * wrong here: a live order sat waiting for payment on a Spider-Man
+         * T-shirt, the customer asked "Bape hoodie price bro", and the
+         * answer was the Spider-Man's price - confidently wrong, for a
+         * question that named a different department outright. The cart is
+         * not what they asked about; ask which design in THAT department
+         * they mean, same as show_image already does two cases up.
+         */
+        const PRODUCT_SPECIFIC = new Set(['price', 'booking', 'cod', 'bargain']);
+        let answerSubject = subject;
+        if (PRODUCT_SPECIFIC.has(decision.question) && !named && selection.category) {
+          const inCategory = (await productService.activeProducts()).filter(
+            (item) => item.category === selection.category
+          );
+          if (inCategory.length > 1) {
+            await bot.sendMessage(phone, bot.t.whichOne(inCategory), { raw: true });
+            act(`${decision.question}_which`);
+            return 'brain_price_which';
+          }
+          if (inCategory.length === 1) [answerSubject] = inCategory;
+        }
+
         /**
          * The item they actually asked about.
          *
@@ -634,7 +729,7 @@ function createExecutor(handlers) {
          * simply was not handed over.
          */
         const answered = await faq
-          .tryAnswer(bot, phone, decision.question, { pack: bot.t, convo, subject })
+          .tryAnswer(bot, phone, decision.question, { pack: bot.t, convo, subject: answerSubject })
           .catch(() => false);
         if (!answered) return null;
         act(decision.question);

@@ -11,6 +11,7 @@
 
 const config = require('../config');
 const templates = require('./templates');
+const productService = require('../services/productService');
 
 const NUM_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
@@ -121,12 +122,16 @@ function createPack(language) {
     // facts customers ask about: price, wait, material, COD, pickup.
 
     priceAnswer: (product) =>
-      t('priceAnswer', {
-        item: product.design || product.name,
-        price: money(product.price),
-        booking: money(product.booking_amount),
-        remaining: money(Number(product.price || 0) - Number(product.booking_amount || 0)),
-      }),
+      // The Bag's price is a fixed promo, not a booking split - see
+      // priceAnswerBag's own note.
+      productService.offersPaymentChoice(product)
+        ? t('priceAnswerBag', {})
+        : t('priceAnswer', {
+            item: product.design || product.name,
+            price: money(product.price),
+            booking: money(product.booking_amount),
+            remaining: money(Number(product.price || 0) - Number(product.booking_amount || 0)),
+          }),
 
     /**
      * "book karni hai to karna kya hoga" - the three steps, in order.
@@ -156,6 +161,13 @@ function createPack(language) {
 
     whichPhoto: (products) =>
       t('whichPhoto', {
+        products: products
+          .map((p, i) => `${i + 1}. ${p.emoji || ''} ${p.design || p.name}`.trim())
+          .join('\n'),
+      }),
+
+    whichOne: (products) =>
+      t('whichOne', {
         products: products
           .map((p, i) => `${i + 1}. ${p.emoji || ''} ${p.design || p.name}`.trim())
           .join('\n'),
@@ -220,9 +232,18 @@ function createPack(language) {
      * on its own reads like money due today and it is not.
      */
     available: (product, color, size, price) => {
+      const item = describe(product.design || product.name, color, size);
+
+      // COD products settle payment mode at checkout, not here - showing the
+      // old advance/balance split this early quoted terms the payment step
+      // was about to replace with a real choice.
+      if (productService.offersPaymentChoice(product)) {
+        return t('availableCod', { item, price: money(price) });
+      }
+
       const booking = Number(product.booking_amount || 0);
       return t('available', {
-        item: describe(product.design || product.name, color, size),
+        item,
         price: money(price),
         booking: money(booking),
         remaining: money(Number(price || 0) - booking),
@@ -335,6 +356,60 @@ function createPack(language) {
           payTo: scanner ? '' : payToText(),
         })
       ),
+
+    /**
+     * Chosen to pay it all now - never the BOOKING wording, which promises a
+     * balance due "jab piece ready ho jaye" that does not exist for this
+     * order.
+     */
+    fullPaymentInstructions: (order, { scanner = false } = {}) =>
+      collapseBlankLines(
+        t('fullPaymentInstructions', {
+          orderId: order.order_id,
+          total: money(order.total),
+          payTo: scanner ? '' : payToText(),
+        })
+      ),
+
+    /**
+     * Chosen Cash on Delivery - the advance confirms the booking, the rest is
+     * cash in hand at the door, not a second online payment. Reusing
+     * paymentInstructions's "jab piece ready ho jaye" here would tell a COD
+     * customer to expect another payment link instead of a delivery.
+     */
+    codPaymentInstructions: (order, { scanner = false } = {}) =>
+      collapseBlankLines(
+        t('codPaymentInstructions', {
+          orderId: order.order_id,
+          advance: money(order.booking_amount || 0),
+          remaining: money(order.remaining_amount || 0),
+          payTo: scanner ? '' : payToText(),
+        })
+      ),
+
+    /**
+     * "Full ya COD?" - asked once, before the order is created, for a
+     * product that actually offers COD. `codTotal` is spelled out because a
+     * customer comparing two numbers should not have to add cod_charge to
+     * the price themselves.
+     */
+    paymentModeChoice: (product) =>
+      t('paymentModeChoice', {
+        item: product.design || product.name,
+        fullPrice: money(product.price),
+        codAdvance: money(product.booking_amount),
+        codRemaining: money(
+          Number(product.price || 0) + Number(product.cod_charge || 0) - Number(product.booking_amount || 0)
+        ),
+        codTotal: money(Number(product.price || 0) + Number(product.cod_charge || 0)),
+      }),
+
+    /**
+     * "kitna time lagega" while a payment is still being checked. No ETA is
+     * ever invented here - see verificationDelayAnswer's own note - only an
+     * apology, because the shop has no real number to give.
+     */
+    verificationDelayAnswer: () => t('verificationDelayAnswer', {}),
 
     waitingForPayment: (order, { scanner = false } = {}) =>
       collapseBlankLines(
