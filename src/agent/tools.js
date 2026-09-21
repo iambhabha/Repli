@@ -303,6 +303,15 @@ const DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'send_aesthura_master_booking_message',
+      description:
+        'Send the exact approved AESTHURA T-shirt master booking message. Call this when the customer asks for full details, price, or booking process for AESTHURA T-shirts. Do NOT summarize or explain it yourself; just call this tool.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'handoff_to_human',
       description:
         'Stop answering and hand this conversation to a person. Use when the customer asks for a human, is upset, is asking about money already paid, or is asking something you genuinely cannot resolve. The shop owner is alerted. After this you must not reply again.',
@@ -656,6 +665,42 @@ function handlers(bot, phone) {
         reason:
           'payment details could not be sent. Tell the customer the owner will send them in a moment, then call handoff_to_human.',
       };
+    },
+
+    async send_aesthura_master_booking_message() {
+      const msg = `🚨 *ONLY LIMITED DROP — LAST CHANCE* 🚨
+🔥 *Last time jo book nahi kar paya tha, NOW IS THE TIME!* 🕷️
+
+*✅ALL SIZES AVAILABLE*
+
+🕷️ *SPIDER-MAN T-SHIRT BOOKING OPEN* 🕷️
+
+Jisko bhi *AESTHURA Spider-Man T-shirt* leni hai, *abhi DM karke booking kar do.*
+
+💰 *T-Shirt Price:* ₹2,499
+💵 *Booking Amount:* Only ₹300
+📦 *Remaining Payment:* T-shirt India aane ke baad hi
+
+⏳ *Approx 1–2 months waiting* after booking, kyunki ye premium T-shirts *out of India manufacture hoke aati hain* aur premium quality ke saath banayi jaati hain.
+
+✨ *Ye T-shirt hamare alawa kahin aur available nahi milegi.*
+
+📏 *SIZES ARE LIMITED!*
+Ek baar kisi size ka slot full ho gaya, toh us size ki booking *next booking cycle* mein hi open hogi. Tab tak wait karna padega.
+
+⚠️ *BOOKING SE PEHLE IMPORTANT:*
+❌ Booking ke baad *size change nahi hoga*
+❌ *Booking amount refund nahi hoga*
+❌ Sirf wahi book kare jo *1–2 months wait kar sakta hai*
+
+Agar last time booking miss ho gayi thi, *ye chance miss mat karna.* 🔥
+
+*Apna size book karne ke liye abhi DM karo 📩🕷️*
+
+*DM @9321684451* ✅`;
+      
+      await bot.sendMessage(phone, msg);
+      return { ok: true, reason: 'Master message sent to customer successfully. Do not send any additional text.' };
     },
 
     async handoff_to_human({ reason }) {
