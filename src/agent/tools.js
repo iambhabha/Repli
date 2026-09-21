@@ -748,10 +748,10 @@ Interested ho toh abhi booking karwa deta hoon.`;
     },
 
     async send_spiderman_scanner() {
-      const msg = 'Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️\n\nPayment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg';
+      const msg = 'Great! Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️\n\nPayment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg\n\nAbhi payment karke screenshot bhejo. Main check karke aapki booking confirm karta hoon.';
       
       await bot.sendMessage(phone, msg);
-      return { ok: true, reason: 'Spider-Man scanner link sent to customer successfully.' };
+      return { ok: true, reason: 'Spider-Man scanner link sent to customer successfully. Do NOT send any other text or questions.' };
     },
 
     async send_spiderman_size_chart() {
