@@ -321,6 +321,15 @@ const DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'send_spiderman_scanner',
+      description:
+        'Send the specific payment QR scanner and message ONLY for the Spider-Man T-shirt. Call this when the customer explicitly asks for a scanner/QR for booking the Spider-Man T-shirt.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'handoff_to_human',
       description:
         'Stop answering and hand this conversation to a person. Use when the customer asks for a human, is upset, is asking about money already paid, or is asking something you genuinely cannot resolve. The shop owner is alerted. After this you must not reply again.',
@@ -727,6 +736,23 @@ Interested ho toh abhi booking karwa deta hoon.`;
 
       await bot.sendMessage(phone, msg);
       return { ok: true, reason: 'Elite Bag master message sent to customer successfully. Do not send any additional text.' };
+    },
+
+    async send_spiderman_scanner() {
+      const msg = 'Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️';
+      const path = require('path');
+      const imgPath = path.join(__dirname, '../../assets/spiderman_qr.jpg');
+      
+      const sent = await bot.sendImage(phone, imgPath, msg).catch((err) => {
+        logger.warn('agent.spiderman_scanner_failed', { phone, error: err.message });
+        return false;
+      });
+
+      if (sent) {
+        return { ok: true, reason: 'Spider-Man scanner sent to customer successfully.' };
+      } else {
+        return { ok: false, reason: 'Failed to send the QR scanner image.' };
+      }
     },
 
     async handoff_to_human({ reason }) {
