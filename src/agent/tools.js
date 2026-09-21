@@ -748,40 +748,17 @@ Interested ho toh abhi booking karwa deta hoon.`;
     },
 
     async send_spiderman_scanner() {
-      const msg = 'Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️';
-      const path = require('path');
-      const imgPath = path.join(__dirname, '../../assets/spiderman_qr.jpg');
+      const msg = 'Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️\n\nPayment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg';
       
       await bot.sendMessage(phone, msg);
-
-      const sent = await bot.sendImage(phone, imgPath, '').catch((err) => {
-        logger.warn('agent.spiderman_scanner_failed', { phone, error: err.message });
-        return false;
-      });
-
-      if (sent) {
-        return { ok: true, reason: 'Spider-Man scanner sent to customer successfully.' };
-      } else {
-        return { ok: false, reason: 'Failed to send the QR scanner image.' };
-      }
+      return { ok: true, reason: 'Spider-Man scanner link sent to customer successfully.' };
     },
 
     async send_spiderman_size_chart() {
-      const path = require('path');
-      const imgPath = path.join(__dirname, '../../assets/spiderman_size_chart.jpg');
+      const msg = 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg';
       
-      await bot.sendMessage(phone, 'Spider-Man T-Shirt Size Chart 🕷️');
-      
-      const sent = await bot.sendImage(phone, imgPath, '').catch((err) => {
-        logger.warn('agent.spiderman_size_chart_failed', { phone, error: err.message });
-        return false;
-      });
-
-      if (sent) {
-        return { ok: true, reason: 'Spider-Man size chart sent to customer successfully.' };
-      } else {
-        return { ok: false, reason: 'Failed to send the size chart image.' };
-      }
+      await bot.sendMessage(phone, msg);
+      return { ok: true, reason: 'Spider-Man size chart link sent to customer successfully.' };
     },
 
     async handoff_to_human({ reason }) {
