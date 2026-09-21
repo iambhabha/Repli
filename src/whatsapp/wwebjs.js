@@ -781,35 +781,19 @@ module.exports = function wwebjsDriver() {
      * bridge. Nothing downstream ever used the returned Message.
      */
     async sendMedia(phone, filePath, caption) {
-      const media = new MessageMedia(
-        mimeFor(filePath),
-        fs.readFileSync(filePath).toString('base64'),
-        path.basename(filePath)
-      );
+      const media = MessageMedia.fromFilePath(filePath);
       const chatId = await resolveChatId(phone);
 
-      const id = await client.pupPage.evaluate(
-        async (to, payload, text) => {
-          const chat = await window.WWebJS.getChat(to, { getAsModel: false });
-          if (!chat) throw new Error('chat not found');
-          const msg = await window.WWebJS.sendMessage(chat, '', {
-            media: payload,
-            caption: text,
-            isCaptionByUser: Boolean(text),
-            parseVCards: false,
-            mentionedJidList: [],
-          });
-          // Only the id crosses back: anything richer has to be serialised,
-          // and serialising is the thing that breaks.
-          if (!msg) throw new Error('whatsapp accepted nothing');
-          return (msg.id && (msg.id._serialized || msg.id.id)) || 'sent';
-        },
-        chatId,
-        { mimetype: media.mimetype, data: media.data, filename: media.filename },
-        caption || ''
-      );
-
-      return id;
+      try {
+        const msg = await client.sendMessage(chatId, media, { caption: caption || '' });
+        return (msg.id && (msg.id._serialized || msg.id.id)) || 'sent';
+      } catch (err) {
+        // Fallback or catch the serialization error if the message was actually sent
+        if (err.message && err.message.includes('Data passed to getter must include an id property')) {
+          return 'sent';
+        }
+        throw err;
+      }
     },
 
     /**
