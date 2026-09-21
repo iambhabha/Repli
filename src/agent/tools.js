@@ -752,7 +752,9 @@ Interested ho toh abhi booking karwa deta hoon.`;
       const path = require('path');
       const imgPath = path.join(__dirname, '../../assets/spiderman_qr.jpg');
       
-      const sent = await bot.sendImage(phone, imgPath, msg).catch((err) => {
+      await bot.sendMessage(phone, msg);
+
+      const sent = await bot.sendImage(phone, imgPath, '').catch((err) => {
         logger.warn('agent.spiderman_scanner_failed', { phone, error: err.message });
         return false;
       });
@@ -768,7 +770,9 @@ Interested ho toh abhi booking karwa deta hoon.`;
       const path = require('path');
       const imgPath = path.join(__dirname, '../../assets/spiderman_size_chart.jpg');
       
-      const sent = await bot.sendImage(phone, imgPath, 'Spider-Man T-Shirt Size Chart 🕷️').catch((err) => {
+      await bot.sendMessage(phone, 'Spider-Man T-Shirt Size Chart 🕷️');
+      
+      const sent = await bot.sendImage(phone, imgPath, '').catch((err) => {
         logger.warn('agent.spiderman_size_chart_failed', { phone, error: err.message });
         return false;
       });
