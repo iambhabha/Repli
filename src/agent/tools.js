@@ -323,7 +323,7 @@ const DEFINITIONS = [
     function: {
       name: 'send_spiderman_scanner',
       description:
-        'Send the specific payment QR scanner and message ONLY for the Spider-Man T-shirt. Call this when the customer explicitly asks for a scanner/QR for booking the Spider-Man T-shirt.',
+        'CRITICAL: Call this IMMEDIATELY when the customer confirms the size they want to book for the Spider-Man T-shirt, OR when they explicitly ask for a payment scanner/QR. Do NOT generate your own text asking for payment; this tool will send the complete payment instructions automatically.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
