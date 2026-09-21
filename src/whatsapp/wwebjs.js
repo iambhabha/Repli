@@ -763,13 +763,53 @@ module.exports = function wwebjsDriver() {
       return client.sendMessage(await resolveChatId(phone), text);
     },
 
+    /**
+     * A photo, a QR, a PDF.
+     *
+     * Client.sendMessage() ends with `getMessageModel(msg)`, which calls
+     * `msg.serialize()` on whatever WhatsApp handed back. Since a WhatsApp Web
+     * update in mid-September that serialise throws on a freshly sent media
+     * message - "Data passed to getter must include an id property" - and the
+     * throw happens AFTER the message has gone. Every product photo, every
+     * payment QR and every proof forwarded to the owner has been failing on
+     * the receipt rather than on the send, which is the worst shape a bug can
+     * take: the shop believes it sent a QR, and the customer has nothing to
+     * pay against.
+     *
+     * So the model is never asked for. The same injected call the library
+     * makes is made here, and only the message id comes back across the
+     * bridge. Nothing downstream ever used the returned Message.
+     */
     async sendMedia(phone, filePath, caption) {
       const media = new MessageMedia(
         mimeFor(filePath),
         fs.readFileSync(filePath).toString('base64'),
         path.basename(filePath)
       );
-      return client.sendMessage(await resolveChatId(phone), media, { caption: caption || '' });
+      const chatId = await resolveChatId(phone);
+
+      const id = await client.pupPage.evaluate(
+        async (to, payload, text) => {
+          const chat = await window.WWebJS.getChat(to, { getAsModel: false });
+          if (!chat) throw new Error('chat not found');
+          const msg = await window.WWebJS.sendMessage(chat, '', {
+            media: payload,
+            caption: text,
+            isCaptionByUser: Boolean(text),
+            parseVCards: false,
+            mentionedJidList: [],
+          });
+          // Only the id crosses back: anything richer has to be serialised,
+          // and serialising is the thing that breaks.
+          if (!msg) throw new Error('whatsapp accepted nothing');
+          return (msg.id && (msg.id._serialized || msg.id.id)) || 'sent';
+        },
+        chatId,
+        { mimetype: media.mimetype, data: media.data, filename: media.filename },
+        caption || ''
+      );
+
+      return id;
     },
 
     /**

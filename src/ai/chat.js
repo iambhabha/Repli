@@ -46,7 +46,34 @@ function isConfigured() {
  *          the assistant message - which may hold `content`, `tool_calls`, or
  *          both - or null if the call could not be made or did not come back.
  */
-async function chat({
+async function chat(options) {
+  if (!isConfigured()) return null;
+  const { messages, purpose = 'agent', phone = null } = options;
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+
+  // Budget gate first: an exhausted budget must not cost a network round trip.
+  if (!(await aiUsageService.withinBudget())) return null;
+
+  /**
+   * One retry, and only for the failures that are worth retrying.
+   *
+   * The agent has no fallback: when this returns null the customer is handed
+   * to a person and the shop goes quiet for them. A single dropped connection
+   * or a 429 while another turn was in flight is not a reason to end a
+   * conversation, and a second attempt costs one more second. A refused key
+   * or a malformed request will fail identically twice, so those are not
+   * retried - the point is transience, not persistence.
+   */
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const outcome = await once(options);
+    if (outcome.result) return outcome.result;
+    if (!outcome.retryable) return null;
+    logger.warn('ai.retrying', { phone, action: `${purpose} ${outcome.why}` });
+  }
+  return null;
+}
+
+async function once({
   messages,
   tools = null,
   toolChoice = 'auto',
@@ -56,12 +83,6 @@ async function chat({
   temperature = 0.4,
   timeoutMs = config.AI_TIMEOUT_MS,
 }) {
-  if (!isConfigured()) return null;
-  if (!Array.isArray(messages) || messages.length === 0) return null;
-
-  // Budget gate first: an exhausted budget must not cost a network round trip.
-  if (!(await aiUsageService.withinBudget())) return null;
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = Date.now();
@@ -97,7 +118,10 @@ async function chat({
         latencyMs: Date.now() - started,
         fallbackReason: `http_${response.status}`,
       });
-      return null;
+      // Rate limits and the provider's own faults pass; 4xx means we asked
+      // for something wrong and asking again changes nothing.
+      const retryable = response.status === 429 || response.status >= 500;
+      return { result: null, retryable, why: `http_${response.status}` };
     }
 
     const payload = await response.json();
@@ -126,8 +150,13 @@ async function chat({
       tokens: `${usage.prompt_tokens || 0}/${usage.completion_tokens || 0}`,
     });
 
-    if (!choice || !choice.message) return null;
-    return { message: choice.message, finishReason: choice.finish_reason || 'stop' };
+    if (!choice || !choice.message) {
+      return { result: null, retryable: true, why: 'empty_choice' };
+    }
+    return {
+      result: { message: choice.message, finishReason: choice.finish_reason || 'stop' },
+      retryable: false,
+    };
   } catch (err) {
     const aborted = err && err.name === 'AbortError';
     logger[aborted ? 'warn' : 'error']('ai.call_failed', {
@@ -143,7 +172,8 @@ async function chat({
       latencyMs: Date.now() - started,
       fallbackReason: aborted ? 'timeout' : 'request_failed',
     });
-    return null;
+    // A timeout or a dropped socket is the textbook case for trying again.
+    return { result: null, retryable: true, why: aborted ? 'timeout' : 'network' };
   } finally {
     clearTimeout(timer);
   }

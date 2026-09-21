@@ -11,63 +11,96 @@ admins:   919799757664
 bypass:   0 number(s)
 products: Spider-Man T-Shirt, Venom T-Shirt, BAPE Single Hood, BAPE Double Hood, Nike Elite Backpack
 
-[12:48:06] INFO outbox.started action=3000ms
-[12:48:06] INFO invalidate.listening action=supabase poll 3000ms
-[12:48:06] INFO whatsapp.starting action=wwebjs
-[12:48:06] INFO whatsapp.browser action=C:\Program Files\Google\Chrome\Application\chrome.exe
+[05:31:41] INFO outbox.started action=3000ms
+[05:31:41] INFO invalidate.listening action=supabase poll 3000ms
+[05:31:41] INFO whatsapp.starting action=wwebjs
+[05:31:41] INFO whatsapp.browser action=C:\Program Files\Google\Chrome\Application\chrome.exe
 🌐 Browser: C:\Program Files\Google\Chrome\Application\chrome.exe
-[12:48:09] INFO repli.started action=wwebjs
-[12:48:14] INFO whatsapp.authenticated
+[05:31:44] INFO repli.started action=wwebjs
+[05:31:45] INFO whatsapp.authenticated
 🔐 Session restored (no QR). Waiting until the bot can reply…
-[12:48:14] INFO whatsapp.attach_start
-[12:48:16] WARN whatsapp.attach_timeout error="Protocol error (Runtime.addBinding): Target closed"
-[12:48:16] WARN whatsapp.attach_missed
-[12:48:16] INFO whatsapp.ready phone=919799757664
+[05:31:45] INFO whatsapp.attach_start
+[05:31:46] INFO whatsapp.attach_defer
+[05:31:46] INFO whatsapp.ready phone=919799757664
 
 ✅ Repli connected as 919799757664
 
-[12:48:26] WARN whatsapp.ready_watchdog phone=919799757664
-
-✅ Repli connected as 919799757664
-
-[12:48:26] INFO whatsapp.msg_hook action=hooked
-[12:48:38] INFO message.ignored phone=917579689361 action=empty_body
-[12:48:45] INFO ai.call action=brain
-[12:48:45] INFO ai.brain phone=919321684451 action=other -> continue conf=0.90 msg="Mujhe setup kr wa kr do mein bot ko explain krunga"
-[12:48:45] INFO reply.sent phone=919321684451
-[12:48:45] INFO turn phone=919321684451 state=COLLECT_DETAILS→COLLECT_DETAILS action=ai_reply_collecting the address msg="Mujhe setup kr wa kr do mein bot ko explain krunga kab kya bol na hai mujhe to"
-[12:48:59] INFO sheet.written action=seen
-[12:49:40] INFO message.ignored action=status_broadcast
-[12:49:45] INFO ai.call action=brain
-[12:49:45] INFO ai.brain phone=919321684451 action=other -> continue conf=0.90 msg="Bhai call he nhi kr sakta"
-[12:49:45] INFO reply.sent phone=919321684451
-[12:49:45] INFO turn phone=919321684451 state=COLLECT_DETAILS→COLLECT_DETAILS action=ai_reply_collecting the address msg="Bhai call he nhi kr sakta"
-[12:49:51] INFO ai.call action=brain
-[12:49:51] INFO ai.brain phone=919321684451 action=chitchat -> continue conf=0.90 msg="Phone kharab hua pada hai"
-[12:49:52] INFO reply.repeat_suppressed phone=919321684451 action=1 dropped
-[12:49:52] INFO turn phone=919321684451 state=COLLECT_DETAILS→COLLECT_DETAILS action=ai_reply_collecting the address msg="Phone kharab hua pada hai"
-[12:51:22] INFO ai.call action=brain
-[12:51:22] INFO ai.brain phone=919321684451 action=chitchat -> continue conf=0.90 msg="Ha ha"
-[12:51:22] INFO reply.sent phone=919321684451
-[12:51:22] INFO turn phone=919321684451 state=COLLECT_DETAILS→COLLECT_DETAILS action=ai_reply_collecting the address msg="Ha ha"
-[12:58:57] INFO sheet.written action=seen
-[12:58:58] INFO ai.call action=brain
-[12:58:58] INFO ai.brain phone=919321684451 action=other -> continue conf=0.90 msg="Laptop hai"
-[12:58:58] INFO reply.sent phone=919321684451
-[12:58:58] INFO turn phone=919321684451 state=COLLECT_DETAILS→COLLECT_DETAILS action=ai_reply_collecting the address msg="Laptop hai"
-[12:59:00] INFO sheet.written action=seen
-[12:59:01] INFO ai.call action=brain
-[12:59:01] INFO ai.brain phone=919321684451 action=other -> continue conf=0.90 msg="Kalil bhai"
-[12:59:01] INFO reply.repeat_suppressed phone=919321684451 action=1 dropped
-[12:59:01] INFO turn phone=919321684451 state=COLLECT_DETAILS→COLLECT_DETAILS action=ai_reply_collecting the address msg="Kalil bhai"
-[12:59:27] INFO message.not_allowed phone=919982385192 action=allowlist
-[13:05:48] INFO message.ignored action=status_broadcast
-[13:39:24] INFO message.ignored action=status_broadcast
-[14:14:37] INFO message.not_allowed phone=918118837161 action=allowlist
-[14:14:42] INFO message.not_allowed phone=918118837161 action=allowlist
-[14:19:25] INFO message.not_allowed phone=918118837161 action=allowlist
-[14:20:30] INFO message.not_allowed phone=918118837161 action=allowlist
-[14:21:30] INFO message.not_allowed phone=918118837161 action=allowlist
-[14:21:50] INFO message.not_allowed phone=919982385192 action=allowlist
-[14:22:42] INFO message.not_allowed phone=919982385192 action=allowlist
-[14:42:56] INFO message.ignored action=group_chat
+[05:31:46] INFO whatsapp.attach_done
+[05:32:03] INFO message.not_allowed phone=919660966302 action=allowlist
+[05:33:47] INFO message.not_allowed phone=919660966302 action=allowlist
+[05:33:57] INFO message.not_allowed phone=919660966302 action=allowlist
+[05:34:04] INFO message.not_allowed phone=919660966302 action=allowlist
+[05:34:11] INFO message.not_allowed phone=919660966302 action=allowlist
+[05:34:19] INFO message.not_allowed phone=919660966302 action=allowlist
+[05:34:36] INFO message.not_allowed phone=919660966302 action=allowlist
+[05:40:24] INFO message.ignored action=status_broadcast
+[05:41:52] INFO message.not_allowed phone=917022281799 action=allowlist
+[05:50:33] INFO ai.call action=agent
+[05:50:33] INFO reply.sent phone=919321684451
+[05:50:33] INFO turn phone=919321684451 state=START→START action=agent_reply msg="?"
+[05:50:34] INFO sheet.written action=seen
+[05:55:57] INFO ai.call action=agent
+[05:55:57] INFO agent.tool phone=919321684451 action=list_products ok
+[05:55:59] INFO ai.call action=agent
+[05:55:59] INFO reply.sent phone=919321684451
+[05:55:59] INFO turn phone=919321684451 state=START→START action=agent_reply msg="Spiderman price"
+[05:56:01] INFO message.ignored phone=919599199910 action=empty_body
+[05:59:45] INFO message.not_allowed phone=919930991935 action=allowlist
+[06:02:51] INFO message.ignored action=group_chat
+[06:02:52] INFO message.ignored action=group_chat
+[06:29:15] INFO ai.call action=agent
+[06:29:15] INFO reply.sent phone=919321684451
+[06:29:15] INFO turn phone=919321684451 state=START→START action=agent_reply msg="Kapil bhai"
+[06:29:16] INFO sheet.written action=seen
+[06:29:16] INFO sheet.written action=seen
+[06:29:16] INFO ai.call action=agent
+[06:29:17] INFO reply.sent phone=919321684451
+[06:29:17] INFO turn phone=919321684451 state=START→START action=agent_reply msg="Kya kr rhe ho"
+[06:54:33] INFO message.ignored action=group_chat
+[07:16:46] INFO message.ignored action=group_chat
+[07:49:33] INFO message.ignored phone=919982385192 action=empty_body
+[07:49:34] INFO message.not_allowed phone=919982385192 action=allowlist
+[07:49:34] INFO message.not_allowed phone=919982385192 action=allowlist
+[07:49:34] INFO message.not_allowed phone=919982385192 action=allowlist
+[08:24:12] INFO message.ignored action=group_chat
+[08:26:03] INFO message.ignored action=group_chat
+[08:26:50] INFO message.ignored action=group_chat
+[08:32:07] INFO message.ignored action=group_chat
+[08:32:56] ERROR templates.load_failed error="TypeError: fetch failed"
+[08:33:00] ERROR outbox.fetch_failed error="TypeError: fetch failed"
+[08:33:03] ERROR settings.sync_failed error="settings.runtime: TypeError: fetch failed"
+[08:33:03] ERROR templates.load_failed error="TypeError: fetch failed"
+[08:33:18] ERROR settings.sync_failed error="settings.runtime: TypeError: fetch failed"
+[08:33:18] ERROR templates.load_failed error="TypeError: fetch failed"
+[08:33:24] INFO message.ignored action=group_chat
+[08:33:25] ERROR outbox.fetch_failed error="TypeError: fetch failed"
+[08:33:25] ERROR settings.sync_failed error="settings.runtime: TypeError: fetch failed"
+[08:34:14] INFO message.ignored action=group_chat
+[08:34:44] INFO message.ignored action=status_broadcast
+[08:43:17] INFO message.ignored action=status_broadcast
+[08:45:02] INFO message.ignored phone=919136823251 action=empty_body
+[08:48:46] INFO message.ignored action=status_broadcast
+[08:54:06] INFO message.ignored action=group_chat
+[09:00:24] INFO message.not_allowed phone=917666331166 action=allowlist
+[09:06:31] INFO message.ignored action=group_chat
+[09:55:37] INFO message.ignored action=group_chat
+[11:03:31] INFO message.ignored action=status_broadcast
+[11:18:10] INFO message.ignored action=group_chat
+[11:18:19] INFO message.ignored action=group_chat
+[11:26:41] INFO message.ignored action=status_broadcast
+[11:54:47] INFO message.not_allowed phone=919982385192 action=allowlist
+[11:59:32] INFO message.not_allowed phone=919982385192 action=allowlist
+[12:07:40] INFO ai.call action=agent
+[12:07:40] INFO reply.sent phone=919321684451
+[12:07:40] INFO turn phone=919321684451 state=START→START action=agent_reply msg="Kapil bhai"
+[12:07:43] INFO ai.call action=agent
+[12:07:43] INFO conversation.mode phone=919321684451 action=HUMAN
+[12:07:43] INFO reply.sent phone=919799757664
+[12:07:43] INFO agent.handoff phone=919321684451 action=Customer is asking for Kapil bhai specifically.
+[12:07:43] INFO agent.tool phone=919321684451 action=handoff_to_human ok
+[12:07:45] INFO ai.call action=agent
+[12:07:45] INFO reply.sent phone=919321684451
+[12:07:45] INFO turn phone=919321684451 state=START→HUMAN_HANDOFF action=agent_handoff msg="Online aai"
+[12:07:56] WARN sheet.failed action=seen error="This operation was aborted"
+[12:08:01] WARN sheet.failed action=seen error="This operation was aborted"
+[12:11:35] INFO message.ignored action=group_chat

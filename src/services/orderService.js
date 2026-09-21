@@ -217,6 +217,35 @@ async function openFor(phone) {
   return rows && rows.length ? rows[0] : null;
 }
 
+/**
+ * Every order this number has ever placed, newest first.
+ *
+ * openFor() answers "what are they in the middle of", which is the question
+ * the sales flow asks. It is not the question a customer asks. "Mera pichla
+ * order kahan hai", "wo hoodie aaya ki nahi", "maine do liye the na" - all of
+ * those are about orders that have left the open statuses, and with only
+ * openFor() the shop had nothing whatsoever to say about any of them.
+ *
+ * Scoped to the one phone in the query rather than filtered afterwards: an
+ * order belonging to somebody else must never be able to reach a reply, and
+ * the cheapest way to guarantee that is to never load it.
+ */
+async function historyFor(phone, limit = 10) {
+  const key = config.normalisePhone(phone);
+  if (!key) return [];
+  return (
+    unwrap(
+      await supabase
+        .from('orders')
+        .select(ORDER_SELECT)
+        .eq('phone', key)
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      'orders.historyFor'
+    ) || []
+  );
+}
+
 async function recent(limit = 10) {
   return (
     unwrap(
@@ -319,6 +348,7 @@ module.exports = {
   getByOrderId,
   getById,
   openFor,
+  historyFor,
   recent,
   setStatus,
   cancelOpen,

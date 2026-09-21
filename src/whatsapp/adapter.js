@@ -167,9 +167,19 @@ function wrap(driver) {
          * held, which is every admin message and every finished turn.
          */
         void typing.refresh(to);
-        // Not awaited: the message is already delivered, and the customer
-        // should not wait on our own bookkeeping.
-        void messageService.recordOutgoing(to, body, 'text');
+
+        /**
+         * Awaited, which it was not before.
+         *
+         * The messages table IS the agent's memory - recentTurns() reads it
+         * back as the transcript on the next turn. Letting the insert run
+         * loose meant a customer typing twice quickly could get a reply built
+         * from a transcript missing the reply before it, and a model that
+         * cannot see what it just said says it again. One insert on a turn
+         * that already spent seconds in the model is not the latency worth
+         * saving.
+         */
+        await messageService.recordOutgoing(to, body, 'text');
       } catch (err) {
         /**
          * The slot was claimed before the send, so a failure has to give it
@@ -184,15 +194,27 @@ function wrap(driver) {
       }
     },
 
+    /**
+     * @returns {Promise<boolean>} whether the picture actually left the building
+     *
+     * It used to return nothing and swallow the failure, which meant a caller
+     * could only assume it had worked. The agent then told a customer "photos
+     * bhej diye" over five consecutive send failures, and told another that a
+     * payment QR was on its way when none was. A send that can fail has to say
+     * so; deciding what to tell the customer is the caller's job, and it
+     * cannot do that job without the answer.
+     */
     async sendImage(phone, filePath, caption) {
       const to = config.normalisePhone(phone);
-      if (!to) return;
+      if (!to) return false;
       try {
         await driver.sendMedia(to, filePath, caption || '');
         logger.info('reply.media_sent', { phone: to, action: path.basename(filePath) });
         await messageService.recordOutgoing(to, caption || '', 'media', filePath);
+        return true;
       } catch (err) {
         logger.error('reply.media_failed', { phone: to, error: err.message });
+        return false;
       }
     },
 
@@ -283,8 +305,16 @@ const DRIVERS = {
  * of every single thing the shop says.
  *
  * Trimmed when it grows, so a busy day cannot turn it into a leak.
+ *
+ * Eight seconds, down from sixty. Sixty was sized for the old bot, which
+ * pulled its replies from a template file and so produced the same sentence
+ * for whole minutes at a time. The agent writes a fresh sentence per turn, so
+ * an identical one now almost always means a genuine burst - the same message
+ * delivered twice, a customer double-tapping send - and a minute-long window
+ * only bought the chance to swallow a real answer to a real question. The
+ * customer has no way to tell a dropped reply from a shop ignoring them.
  */
-const REPEAT_WINDOW = 60_000;
+const REPEAT_WINDOW = 8_000;
 
 /**
  * The same window, for messages that bypass the rewriter.

@@ -19,6 +19,8 @@
  */
 
 const config = require('../config');
+const cache = require('../db/cache');
+const { supabase, unwrap } = require('../db/supabase');
 const customerService = require('../services/customerService');
 const orderService = require('../services/orderService');
 
@@ -50,6 +52,19 @@ all in the tools. Call them. Never quote a price, promise a size, or name a
 product you have not just read from a tool this turn.
 If a tool says something is unavailable, say so plainly and offer what IS
 available - the tool tells you.
+You have the customer's full order history through get_my_orders: what they
+bought, when, the exact status, what is paid and what is left. Use it. "Mera
+order kahan hai" is a question you can always answer properly.
+
+WHAT IS NOT YOURS TO SHARE
+The shop's own numbers are not the customer's business and you do not have
+them: total sales, total earnings, how many orders came in today, what
+anything cost to make, what the margin is, how many customers there are. If
+someone asks, tell them plainly that you cannot share that. Never guess at it
+and never estimate it.
+Another customer's order, name, address or number is never mentioned, no
+matter who is asking or why. Every tool you have is already scoped to the
+person you are talking to; keep it that way.
 
 MONEY - the rules that do not bend
 - You can place an order (create_order) and send payment details. That is the
@@ -63,6 +78,15 @@ MONEY - the rules that do not bend
   "confirmed", "received", "done" or "verified".
 - Never invent an order id, an amount, a discount, a delivery date, or a
   refund. If you do not have it from a tool, you do not have it.
+
+WHEN YOU DO NOT KNOW
+Say so, in one line, and say what you will do about it - "ye main confirm
+karke batata hoon" and then hand off. Never fill the gap by changing the
+subject, and never answer a question they did not ask. A customer can tell
+the difference instantly, and it is the single thing that makes a shop feel
+like a machine.
+Returns, exchanges and refunds are not yours to decide. Those are the owner's
+call, every time - hand them over.
 
 WHEN TO STEP BACK
 Call handoff_to_human when they ask for a person, when they are angry, when
@@ -78,8 +102,28 @@ to guess about something that matters. Handing over is not a failure.
  * order" is a round trip for nothing. Everything here is also reachable
  * through a tool, so the model can re-read it when it matters.
  */
-async function situation(phone) {
+async function situation(phone, pushName) {
   const lines = [];
+
+  /**
+   * What WhatsApp says they are called.
+   *
+   * The router has always read this off the incoming message and it has
+   * always been thrown away. It is worth one line: a shop that can say
+   * "haan Rahul bhai" reads differently from one that cannot, and asking
+   * somebody their name when their name is printed above the chat is the
+   * kind of small stupidity that makes a bot obvious.
+   *
+   * Flagged as a display name on purpose. It is whatever the customer typed
+   * into their own phone - a nickname, a shop name, an emoji - so it is
+   * never good enough to put on a parcel.
+   */
+  if (pushName) {
+    lines.push(
+      `WhatsApp shows their name as "${pushName}" - fine for addressing them, ` +
+        'but NOT a delivery name; ask properly for that.'
+    );
+  }
 
   const customer = await customerService.getByPhone(phone).catch(() => null);
   if (customer && customerService.hasFullAddress(customer)) {
@@ -120,8 +164,55 @@ async function situation(phone) {
   return lines.join('\n');
 }
 
-async function build(phone) {
-  return `${CHARACTER}\n\nRIGHT NOW\n${await situation(phone)}`;
+/**
+ * The handful of things about the shop that are not in the catalogue.
+ *
+ * How long a hoodie takes to make, what the T-shirts are cut from, which city
+ * it posts from - the owner edits these in app_settings, and the deleted FAQ
+ * module was the only thing that ever read them. Without them the agent was
+ * asked "kitne din lagenge" every other conversation and had, truthfully,
+ * nothing to say: it is forbidden from inventing, so it changed the subject,
+ * which is the behaviour that reads as a bot talking past you.
+ *
+ * Handed over in the prompt rather than behind a tool because they are short,
+ * they never change mid-conversation, and half the questions a shop gets are
+ * one of these.
+ */
+const FACT_KEYS = {
+  location_city: 'Shop is based in',
+  shipping_note: 'Shipping',
+  tshirt_lead_time: 'T-shirts take',
+  hoodie_lead_time: 'Hoodies take',
+  tshirt_material: 'T-shirt fabric',
+  hoodie_brands: 'Hoodie brands',
+  lot_note: 'Stock note',
+};
+
+async function shopFacts() {
+  return cache.remember(cache.KEYS.faq, config.FAQ_TTL_MS, async () => {
+    const rows = unwrap(
+      await supabase.from('app_settings').select('key,value').in('key', Object.keys(FACT_KEYS)),
+      'agent.facts'
+    );
+    return Object.fromEntries((rows || []).map((row) => [row.key, row.value]));
+  });
+}
+
+async function build(phone, { pushName = '' } = {}) {
+  const [facts, now] = await Promise.all([
+    shopFacts().catch(() => ({})),
+    situation(phone, pushName),
+  ]);
+
+  const known = Object.entries(FACT_KEYS)
+    .filter(([key]) => facts[key])
+    .map(([key, label]) => `- ${label}: ${facts[key]}`);
+
+  const about = known.length
+    ? `\n\nABOUT THE SHOP - these are true, use them when asked\n${known.join('\n')}`
+    : '';
+
+  return `${CHARACTER}${about}\n\nRIGHT NOW\n${now}`;
 }
 
 module.exports = { build, CHARACTER };

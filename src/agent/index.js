@@ -46,6 +46,15 @@ const messages = require('../bot/messages');
 const MAX_STEPS = 6;
 
 /**
+ * How many turns in a row the model has failed this customer.
+ *
+ * In memory on purpose: it exists to tell a blip apart from an outage over
+ * the next few seconds, and a restart forgetting it is the correct
+ * behaviour - a fresh process is exactly the thing that might have fixed it.
+ */
+const consecutiveFailures = new Map();
+
+/**
  * A screenshot against an open order, handled before the model runs.
  *
  * Returns a note for the model describing what happened, or null when the
@@ -87,10 +96,23 @@ async function think(bot, phone, msg, mediaNote) {
    * the stored transcript: it describes this turn only.
    */
   const conversation = [
-    { role: 'system', content: await promptBuilder.build(phone) },
+    { role: 'system', content: await promptBuilder.build(phone, { pushName: bot.pushName }) },
     ...history,
   ];
-  if (history.length === 0 && body) conversation.push({ role: 'user', content: body });
+
+  /**
+   * The transcript normally already ends with this message, because the
+   * router claimed it into `messages` before handing over. Normally is not
+   * always: that insert logs and carries on when it fails, so the turn can
+   * arrive here with the customer's actual words missing from the history it
+   * was read from. The model would then answer the message before this one -
+   * which reads, from the other end, exactly like a shop repeating itself.
+   *
+   * So it is checked rather than assumed, and appended when absent.
+   */
+  const newest = history[history.length - 1];
+  const alreadyThere = newest && newest.role === 'user' && newest.content.trim() === body;
+  if (body && !alreadyThere) conversation.push({ role: 'user', content: body });
   if (mediaNote) conversation.push({ role: 'system', content: mediaNote });
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
@@ -189,17 +211,38 @@ async function handleMessage(bot, msg) {
 
   if (!reply) {
     /**
-     * No answer, so no guess. The owner is told and the conversation stops
-     * being the bot's - the customer is mid-purchase and a shop that invents
-     * a reply here is worse than one that goes quiet and fetches a person.
+     * No answer, so no guess - but not a life sentence either.
+     *
+     * This used to switch the conversation to HUMAN on the first failure, and
+     * HUMAN is permanent: the router stops answering that number entirely
+     * until the owner clears it by hand. So one timed-out request, on a model
+     * call that succeeds the other ninety-nine times, silently ended the
+     * shop's side of a conversation and the customer just watched it go dead.
+     *
+     * A single failure now costs one apologetic line and an alert. Two in a
+     * row is a pattern rather than a blip, and that is worth a person.
      */
-    logger.warn('agent.no_reply', { phone });
-    await conversationService.setMode(phone, conversationService.MODE.HUMAN);
+    const failures = (consecutiveFailures.get(phone) || 0) + 1;
+    consecutiveFailures.set(phone, failures);
+    logger.warn('agent.no_reply', { phone, action: `failure ${failures}` });
+
     await bot
-      .notifyAdmins(`⚠️ ${phone} ko jawab nahi de paaye (AI unavailable). Aap dekh lo.`)
+      .notifyAdmins(
+        `⚠️ ${phone} ko jawab nahi de paaye (AI unavailable, ${failures}x).` +
+          (failures < 2 ? '' : `\n\nAb HUMAN mode me hai. Wapas dene ke liye: /resume ${phone}`)
+      )
       .catch(() => {});
+
+    if (failures < 2) {
+      await bot.sendMessage(phone, 'Ek minute bhai, thoda issue aa raha hai — fir se bhejo 🙏');
+      return 'agent_retry_asked';
+    }
+
+    await conversationService.setMode(phone, conversationService.MODE.HUMAN);
     return 'agent_unavailable';
   }
+
+  consecutiveFailures.delete(phone);
 
   // HUMAN means a person owns this conversation now - including when the
   // agent itself just handed it over mid-turn.

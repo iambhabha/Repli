@@ -38,6 +38,38 @@ const paymentService = require('../services/paymentService');
 
 const money = (n) => `${config.CURRENCY}${Math.round(Number(n) || 0)}`;
 
+/**
+ * What each status actually means for the customer standing in front of you.
+ *
+ * Handed over as a sentence rather than left for the model to infer from the
+ * name, because one of these inferences is dangerous: PAYMENT_VERIFYING reads
+ * like good news and is not. It means a picture of a payment is sitting with
+ * the owner, unchecked. A model guessing from the word "payment" tells a
+ * customer their money has landed, and that is the one thing this whole
+ * design exists to prevent.
+ */
+const STATUS_MEANS = {
+  PENDING_PAYMENT:
+    'Order is placed but no money has been received. They still need to pay.',
+  PAYMENT_VERIFYING:
+    'Their payment proof is with the owner and has NOT been checked yet. It is not confirmed. Do not say it is.',
+  CONFIRMED:
+    'The owner has verified the payment. The order is accepted and is being prepared. Use the making time from ABOUT THE SHOP for when it will be ready.',
+  CANCELLED: 'This order was cancelled. Nothing is owed and nothing is coming.',
+  PAYMENT_FAILED:
+    'The owner looked at the payment and rejected it. This needs a person - do not explain why yourself.',
+};
+
+const OPEN = ['PENDING_PAYMENT', 'PAYMENT_VERIFYING'];
+
+/** "14 Sep" - a date a person reads, not a timestamp. */
+const shortDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? null
+    : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+};
+
 /** Loose match on a name the model typed, against names the shop really has. */
 const slug = (s) =>
   String(s || '')
@@ -83,19 +115,51 @@ async function resolveProduct(name) {
   };
 }
 
-/** The shape every product answer takes, so the model sees one format. */
+/**
+ * The shape every product answer takes, so the model sees one format.
+ *
+ * Everything the shop knows about the thing, because the model is forbidden
+ * from inventing and so cannot answer a question about a detail it was not
+ * handed. "Cotton hai?", "kaunsa brand?", "print kaisa hai?", "advance kitna?"
+ * are all ordinary questions, and a shop that goes quiet on them is the shop
+ * that feels like a bot.
+ *
+ * Sizes are per colour rather than one flat list. They used to be read for
+ * colours[0] only and labelled `sizes_in_stock`, which is a quiet lie the
+ * moment the red is sold out in L and the black is not - the model would
+ * promise an L that the order path then refuses.
+ */
 async function describe(product) {
   const colours = await productService.availableColors(product.id);
-  const sizes = await productService.availableSizes(product.id, colours[0] || null);
+
+  const options = [];
+  for (const colour of colours) {
+    options.push({
+      colour,
+      sizes_in_stock: await productService.availableSizes(product.id, colour),
+    });
+  }
+  // A product with no colour variants still has sizes worth knowing.
+  if (!colours.length) {
+    const sizes = await productService.availableSizes(product.id, null);
+    if (sizes.length) options.push({ colour: null, sizes_in_stock: sizes });
+  }
+
   return {
     name: product.name,
+    code: product.code,
     price: money(productService.priceOf(product)),
     category: product.category || null,
+    brand: product.brand || null,
+    design: product.design || null,
+    description: product.description || null,
     made_to_order: Boolean(product.made_to_order),
-    colours_in_stock: colours,
-    sizes_in_stock: sizes,
+    in_stock: options.some((o) => o.sizes_in_stock.length) || colours.length > 0,
+    options,
     cod_available: Boolean(product.cod_available),
+    cod_charge: product.cod_charge ? money(product.cod_charge) : null,
     booking_amount: product.booking_amount ? money(product.booking_amount) : null,
+    photos_available: Boolean(product.image_path),
   };
 }
 
@@ -139,6 +203,21 @@ const DEFINITIONS = [
         properties: {
           product: { type: 'string' },
           colour: { type: 'string', description: 'Limits the photos to one colour' },
+        },
+        required: ['product'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_colour_chart',
+      description:
+        'Send the printed colour chart for a product whose range is chosen off a sheet instead of a list - the hoodies, whose patterns have no names, and the bag. Use it whenever the customer asks which colours there are, or asks to see the colours, for one of those. The customer picks by ticking a colour on the chart and sending the picture back.',
+      parameters: {
+        type: 'object',
+        properties: {
+          product: { type: 'string' },
         },
         required: ['product'],
       },
@@ -198,9 +277,9 @@ const DEFINITIONS = [
   {
     type: 'function',
     function: {
-      name: 'get_open_order',
+      name: 'get_my_orders',
       description:
-        "This customer's current unfinished order and its status, or nothing if they have none.",
+        "Every order this customer has ever placed, newest first, with its exact status and what that status means, what was ordered, what it cost, what they have paid and what is left. Call this for any question about an order - 'mera order kahan hai', 'kitna pending hai', 'kab aayega', 'maine kya liya tha', or when they quote an order id.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -272,9 +351,9 @@ function handlers(bot, phone) {
         available: quantity > 0,
         quantity,
         price: info.price,
-        // So a "no" is never a dead end.
-        colours_in_stock: info.colours_in_stock,
-        sizes_in_stock: await productService.availableSizes(found.product.id, colour || null),
+        // So a "no" is never a dead end: whatever they asked for, the shop
+        // can name what it does have in the same breath.
+        options: info.options,
       };
     },
 
@@ -290,16 +369,91 @@ function handlers(bot, phone) {
         return { ok: false, reason: `no photos on file for ${found.product.name}` };
       }
 
+      let sent = 0;
       for (const path of paths.slice(0, 5)) {
-        await bot.sendImage(phone, path, '').catch((err) =>
-          logger.warn('agent.photo_failed', { phone, error: err.message })
-        );
+        const went = await bot
+          .sendImage(phone, path, '')
+          .catch((err) => {
+            logger.warn('agent.photo_failed', { phone, error: err.message });
+            return false;
+          });
+        if (went) sent += 1;
       }
+
+      /**
+       * Counted, not assumed. WhatsApp refuses media often enough - a bad
+       * upload, a session that needs a reload - that "we tried" and "they
+       * have it" are different facts, and the customer is looking at the one
+       * we do not control.
+       */
+      if (!sent) {
+        return {
+          ok: false,
+          reason:
+            `photos of ${found.product.name} would not send just now. Say the photo is not going ` +
+            'through, describe it briefly instead, and offer to have the owner send it.',
+        };
+      }
+
       return {
         ok: true,
-        sent: Math.min(paths.length, 5),
+        sent,
         product: found.product.name,
         note: 'Photos are already on their way. Do not describe them, just say something short.',
+      };
+    },
+
+    /**
+     * The printed sheet, for a range that cannot be listed.
+     *
+     * The hoodies are about forty camo patterns with no names and the bag is
+     * twenty-four colours off one card. Reading either out is not an option
+     * and naming them would be inventing the shop's catalogue, so the sheet
+     * goes across and the customer marks it.
+     *
+     * Sent with an empty caption like every other file here: what the
+     * customer has to do next is a sentence the model writes, in whatever
+     * language the conversation is already in.
+     */
+    async send_colour_chart({ product }) {
+      const found = await resolveProduct(product);
+      if (found.error) return { ok: false, reason: found.error };
+
+      const chart = await productService.chartFor(found.product);
+      if (!chart) {
+        return {
+          ok: false,
+          reason:
+            `no colour chart on file for ${found.product.name}. Do not describe the colours ` +
+            'from memory - offer to have the owner send the chart.',
+        };
+      }
+
+      const count = await productService.chartSize(found.product);
+
+      const sent = await bot.sendImage(phone, chart, '').catch((err) => {
+        logger.warn('agent.chart_failed', { phone, error: err.message });
+        return false;
+      });
+
+      /** Same reason as the photos: "we tried" and "they have it" differ. */
+      if (!sent) {
+        return {
+          ok: false,
+          reason:
+            `the colour chart for ${found.product.name} would not send just now. Say it is not ` +
+            'going through and offer to have the owner send it.',
+        };
+      }
+
+      return {
+        ok: true,
+        product: found.product.name,
+        colours: count || undefined,
+        note:
+          'The chart is already on its way. Tell them to tick or mark the colour they want on ' +
+          'it and send the picture back - that is how they choose. One or two lines, and do ' +
+          'not list the colours, they are on the chart.',
       };
     },
 
@@ -426,22 +580,36 @@ function handlers(bot, phone) {
       };
     },
 
-    async get_open_order() {
-      const order = await orderService.openFor(phone);
-      if (!order) return { ok: true, has_order: false };
-      const item = orderService.itemOf(order);
+    async get_my_orders() {
+      const orders = await orderService.historyFor(phone, 10);
+      if (!orders.length) return { ok: true, orders: [], note: 'They have never ordered.' };
+
       return {
         ok: true,
-        has_order: true,
-        order_id: order.order_id,
-        status: order.status,
-        product: item && item.product_name_snapshot,
-        colour: item && item.color_snapshot,
-        size: item && item.size_snapshot,
-        quantity: item && item.quantity,
-        total: money(order.total),
-        pay_now: money(order.booking_amount || order.total),
-        payment_status: (orderService.paymentOf(order) || {}).status || null,
+        orders: orders.map((order) => {
+          const item = orderService.itemOf(order);
+          const payment = orderService.paymentOf(order) || {};
+          return {
+            order_id: order.order_id,
+            status: order.status,
+            // The status name alone tells the model nothing safe; this is the
+            // difference between "checking" and "confirmed", which is the one
+            // distinction it must never get wrong.
+            means: STATUS_MEANS[order.status] || 'status unknown - hand this to a person',
+            still_open: OPEN.includes(order.status),
+            placed_on: shortDate(order.created_at),
+            product: item && item.product_name_snapshot,
+            colour: (item && item.color_snapshot) || null,
+            size: (item && item.size_snapshot) || null,
+            quantity: item && item.quantity,
+            total: money(order.total),
+            pay_now: money(order.booking_amount || order.total),
+            remaining: order.remaining_amount ? money(order.remaining_amount) : null,
+            payment_mode: order.payment_mode || null,
+            payment_status: payment.status || null,
+            delivering_to: order.city ? `${order.city}, ${order.state} ${order.pin}` : null,
+          };
+        }),
       };
     },
 
@@ -462,18 +630,31 @@ function handlers(bot, phone) {
       const amount = money(order.booking_amount || order.total);
       const qr = await paymentService.paymentQrImage().catch(() => null);
 
-      if (qr) {
-        await bot.sendImage(phone, qr, `${order.order_id} — ${amount}`);
+      /**
+       * The QR first, the link if the QR will not go, a person if neither
+       * works. A customer who has decided to pay and is handed nothing is the
+       * most expensive failure in the shop, so this does not stop at the
+       * first thing that did not work.
+       */
+      if (qr && (await bot.sendImage(phone, qr, `${order.order_id} — ${amount}`))) {
         return { ok: true, sent: 'qr', amount, order_id: order.order_id };
       }
+
       if (paymentService.isPaymentLinkConfigured()) {
         await bot.sendMessage(phone, `${order.order_id} — ${amount}\n${config.PAYMENT_LINK}`);
+        logger.warn('agent.qr_fallback_link', { phone, orderId: order.order_id });
         return { ok: true, sent: 'link', amount, order_id: order.order_id };
       }
+
+      await bot
+        .notifyAdmins(
+          `⚠️ ${phone} ko ${order.order_id} ka payment detail nahi bhej paaye (QR fail, link set nahi hai).`
+        )
+        .catch(() => {});
       return {
         ok: false,
         reason:
-          'the shop has no payment link or QR configured. Tell the customer the owner will send payment details, and hand off to a human.',
+          'payment details could not be sent. Tell the customer the owner will send them in a moment, then call handoff_to_human.',
       };
     },
 
@@ -481,7 +662,17 @@ function handlers(bot, phone) {
       await conversationService.setMode(phone, conversationService.MODE.HUMAN);
       await conversationService.save(phone, { state: 'HUMAN_HANDOFF' });
       await bot
-        .notifyAdmins(`🙋 ${phone} needs a person.\nReason: ${reason || 'not given'}`)
+        /**
+         * The way back is in the message.
+         *
+         * HUMAN mode is permanent until an admin lifts it, and an alert that
+         * does not say how to lift it leaves the owner holding a conversation
+         * the bot will never speak in again.
+         */
+        .notifyAdmins(
+          `🙋 ${phone} ko banda chahiye.\nReason: ${reason || 'not given'}\n\n` +
+            `Wapas bot par dene ke liye: /resume ${phone}`
+        )
         .catch(() => {});
       logger.info('agent.handoff', { phone, action: reason });
       return { ok: true, handed_off: true, note: 'Say one short closing line, then stop.' };
