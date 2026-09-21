@@ -434,6 +434,16 @@ If a customer asks for the **size chart** or measurements for the **Spider-Man T
 
 ---
 
+# 15B. BOOKING FLOW OVERRIDE FOR T-SHIRTS
+
+When a customer confirms the **size** they want to book for an AESTHURA T-shirt (Spider-Man or Venom):
+1. **DO NOT** ask for delivery details, address, or phone number.
+2. **IMMEDIATELY** send the payment scanner (use \`send_spiderman_scanner\` for Spider-Man).
+3. Tell the customer: "Please pay and send a screenshot. Main check karke aapki booking confirm karta hoon."
+4. **DO NOT** use the \`create_order\` tool for T-shirts until payment is confirmed by a human. Wait for the human to handle the rest.
+
+---
+
 # 16. HOODIES
 
 Hoodies are sold through the 3POINTER.CLUB business.
