@@ -216,7 +216,7 @@ Yes bro! 🔥 Elite Bag ka price pehle **₹3,099** tha, but abhi special offer 
 🚚 Free All-India Shipping
 🔑 Free Premium Keychain
 🧦 Free Socks
-💵 COD Available — **₹200 extra** for COD
+💵 COD Available — **₹200 extra** charge. (Sirf ₹200 advance payment abhi karna hoga, baaki COD)
 
 ⚠️ **Limited pieces left!** Agar book karna hai toh jaldi kar do, kyunki ye **₹2,599 ka price kahin nahi milega — guaranteed.** 🔥
 
@@ -231,7 +231,7 @@ When a customer asks about Elite Bag:
 * Mention the current price when relevant.
 * Mention free shipping when explaining the offer.
 * Mention free keychain and socks.
-* Mention COD is available for ₹200 extra.
+* **COD Policy for Bags**: COD is available for ₹200 extra charge. Customer MUST pay ₹200 as advance payment first. The remaining amount will be paid as Cash on Delivery.
 * Mention limited pieces only when discussing the current limited-stock offer.
 * **Delivery Time:** Elite Bags take **2-4 days** for delivery. Do NOT say 15-20 days.
 * Do not confuse Elite Bag with AESTHURA.
@@ -296,6 +296,11 @@ Booking:
 
 Remaining payment:
 📦 **₹2,199 after the T-shirt arrives in India**
+
+**COD Policy for T-Shirts:** 
+* COD is available, but there is a ₹200 extra charge for COD.
+* Customer MUST pay the ₹300 booking amount first to secure their booking.
+* The remaining amount + ₹200 extra will be paid via Cash on Delivery when the T-shirt is delivered.
 
 Waiting period:
 ⏳ **Approx 1–2 months after booking**
@@ -374,8 +379,8 @@ The message must be sent **exactly as provided**:
 Jisko bhi **AESTHURA Spider-Man T-shirt** leni hai, **abhi DM karke booking kar do.**
 
 💰 **T-Shirt Price:** ₹2,499
-💵 **Booking Amount:** Only ₹300
-📦 **Remaining Payment:** T-shirt India aane ke baad hi
+💵 **Booking Amount:** Only ₹300 (Advance to confirm booking)
+📦 **Remaining Payment:** T-shirt India aane ke baad hi (COD available hai, but ₹200 extra charge for COD)
 
 ⏳ **Approx 1–2 months waiting** after booking, kyunki ye premium T-shirts **out of India manufacture hoke aati hain** aur premium quality ke saath banayi jaati hain.
 
