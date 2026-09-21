@@ -312,6 +312,15 @@ const DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'send_elite_bag_master_message',
+      description:
+        'Send the exact approved ELITE BAG customer message. Call this when the customer asks about the Elite Bag / Elite Backpack and the full offer (price, freebies, COD) needs to be explained. Do NOT summarize or explain it yourself; just call this tool.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'handoff_to_human',
       description:
         'Stop answering and hand this conversation to a person. Use when the customer asks for a human, is upset, is asking about money already paid, or is asking something you genuinely cannot resolve. The shop owner is alerted. After this you must not reply again.',
@@ -701,6 +710,23 @@ Agar last time booking miss ho gayi thi, *ye chance miss mat karna.* 🔥
       
       await bot.sendMessage(phone, msg);
       return { ok: true, reason: 'Master message sent to customer successfully. Do not send any additional text.' };
+    },
+
+    async send_elite_bag_master_message() {
+      const msg = `Yes bro! 🔥 Elite Bag ka price pehle *₹3,099* tha, but abhi special offer chal raha hai — *sirf ₹2,599* mein mil raha hai! 🏀
+
+🎒 *Elite Bag — ₹2,599*
+🚚 Free All-India Shipping
+🔑 Free Premium Keychain
+🧦 Free Socks
+💵 COD Available — *₹200 extra* for COD
+
+⚠️ *Limited pieces left!* Agar book karna hai toh jaldi kar do, kyunki ye *₹2,599 ka price kahin nahi milega — guaranteed.* 🔥
+
+Interested ho toh abhi booking karwa deta hoon.`;
+
+      await bot.sendMessage(phone, msg);
+      return { ok: true, reason: 'Elite Bag master message sent to customer successfully. Do not send any additional text.' };
     },
 
     async handoff_to_human({ reason }) {
