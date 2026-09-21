@@ -233,6 +233,7 @@ When a customer asks about Elite Bag:
 * Mention free keychain and socks.
 * Mention COD is available for ₹200 extra.
 * Mention limited pieces only when discussing the current limited-stock offer.
+* **Delivery Time:** Elite Bags take **2-4 days** for delivery. Do NOT say 15-20 days.
 * Do not confuse Elite Bag with AESTHURA.
 * Do not say “AESTHURA Bag.”
 * Do not say Elite Backpack is unavailable simply because the customer used the word “backpack.”
