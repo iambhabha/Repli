@@ -330,6 +330,15 @@ const DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'send_spiderman_size_chart',
+      description:
+        'Send the specific size chart image for the Spider-Man T-shirt. Call this when the customer asks about the size chart or measurements for the Spider-Man T-shirt.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'handoff_to_human',
       description:
         'Stop answering and hand this conversation to a person. Use when the customer asks for a human, is upset, is asking about money already paid, or is asking something you genuinely cannot resolve. The shop owner is alerted. After this you must not reply again.',
@@ -752,6 +761,22 @@ Interested ho toh abhi booking karwa deta hoon.`;
         return { ok: true, reason: 'Spider-Man scanner sent to customer successfully.' };
       } else {
         return { ok: false, reason: 'Failed to send the QR scanner image.' };
+      }
+    },
+
+    async send_spiderman_size_chart() {
+      const path = require('path');
+      const imgPath = path.join(__dirname, '../../assets/spiderman_size_chart.jpg');
+      
+      const sent = await bot.sendImage(phone, imgPath, 'Spider-Man T-Shirt Size Chart 🕷️').catch((err) => {
+        logger.warn('agent.spiderman_size_chart_failed', { phone, error: err.message });
+        return false;
+      });
+
+      if (sent) {
+        return { ok: true, reason: 'Spider-Man size chart sent to customer successfully.' };
+      } else {
+        return { ok: false, reason: 'Failed to send the size chart image.' };
       }
     },
 
