@@ -427,7 +427,7 @@ The approved message is the **MASTER AESTHURA T-SHIRT BOOKING MESSAGE**.
 
 # 15A. SPIDER-MAN QR SCANNER
 
-If a customer specifically asks for a scanner, QR code, or payment link to book the **Spider-Man T-shirt**, you MUST use the `send_spiderman_scanner` tool.
+If a customer specifically asks for a scanner, QR code, or payment link to book the **Spider-Man T-shirt**, you MUST use the \`send_spiderman_scanner\` tool.
 Do NOT send the normal payment link.
 
 ---
