@@ -783,56 +783,31 @@ Interested ho toh abhi booking karwa deta hoon.`;
     },
 
     async send_spiderman_scanner() {
-      const intro =
+      const msg =
         'Great! Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. ' +
-        'Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️';
+        'Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️\n\n' +
+        'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg\n\n' +
+        'Abhi payment karke screenshot bhejo. Main check karke aapki booking confirm karta hoon.';
 
-      await bot.sendMessage(phone, intro);
-
-      const sent = await bot.sendImage(phone, assetPath('spiderman_qr'), '').catch((err) => {
-        logger.warn('agent.spiderman_qr_failed', { phone, error: err.message });
-        return false;
-      });
-
-      /** The link is the fallback, never the default. */
-      if (!sent) {
-        await bot.sendMessage(phone, 'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg');
-      }
-
-      await bot.sendMessage(
-        phone,
-        'Abhi payment karke screenshot bhejo. Main check karke aapki booking confirm karta hoon.'
-      );
+      await bot.sendMessage(phone, msg);
 
       return {
         ok: true,
-        sent: sent ? 'image' : 'link',
-        reason:
-          'Spider-Man payment scanner already sent to the customer. Do NOT send any other text, link or questions.',
+        reason: 'Success. YOU MUST STOP NOW. DO NOT GENERATE ANY OTHER TEXT. End your turn.',
       };
     },
 
     async send_bag_scanner() {
-      await bot.sendMessage(
-        phone,
+      const msg =
         'Yahan par pay karke screenshot bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. ' +
-          'Baaki hamare owner aakar aapse baat kar lenge.'
-      );
+        'Baaki hamare owner aakar aapse baat kar lenge.\n\n' +
+        'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg';
 
-      const sent = await bot.sendImage(phone, assetPath('spiderman_qr'), '').catch((err) => {
-        logger.warn('agent.bag_qr_failed', { phone, error: err.message });
-        return false;
-      });
-
-      if (!sent) {
-        await bot.sendMessage(phone, 'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg');
-      }
+      await bot.sendMessage(phone, msg);
 
       return {
         ok: true,
-        sent: sent ? 'image' : 'link',
-        reason:
-          'Bag payment scanner already sent to the customer. Do NOT send any other text, link or questions.',
+        reason: 'Success. YOU MUST STOP NOW. DO NOT GENERATE ANY OTHER TEXT. End your turn.',
       };
     },
 
