@@ -397,6 +397,13 @@ function handlers(bot, phone) {
       const found = await resolveProduct(product);
       if (found.error) return { ok: false, reason: found.error };
 
+      // BAG OVERRIDE: Send the Instagram video link instead of photos
+      if (found.product.name.toLowerCase().includes('bag') || found.product.name.toLowerCase().includes('backpack')) {
+        const msg = "Bhai, bag ka complete video is Instagram link pe hai: https://www.instagram.com/reel/DcY0wtnt4RL/?stkn=YTBod29rcGpoemZv . Aap wahi video dekh lo, aur fir ₹200 advance (COD ke liye) ya full payment karke screenshot nikal kar bhej do. Payment aane ke baad hum bag dispatch kar denge.";
+        await bot.sendMessage(phone, msg);
+        return { ok: true, reason: 'Instagram video link sent. Do NOT send any other text, photos, or questions.' };
+      }
+
       let variant = null;
       if (colour) variant = await productService.findVariant(found.product.id, colour, null);
 
