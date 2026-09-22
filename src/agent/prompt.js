@@ -451,6 +451,8 @@ Do NOT send the normal payment link.
 
 If a customer asks for the **size chart** or measurements for the **Spider-Man T-shirt**, you MUST use the \`send_spiderman_size_chart\` tool.
 
+**NEVER type a raw file or GitHub URL into a message yourself.** The customer asked for a picture, not a link. These tools send the actual image file; a \`raw.githubusercontent.com\` link pasted into a chat looks like a scam and nobody scans it. If a tool reports that it already sent the scanner or chart, say nothing more about it.
+
 ---
 
 # 15B. BOOKING FLOW OVERRIDE FOR T-SHIRTS

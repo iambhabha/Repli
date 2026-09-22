@@ -28,6 +28,7 @@
  *   rejecting a payment     the other half of the same admin decision.
  */
 
+const nodePath = require('path');
 const config = require('../config');
 const logger = require('../logger');
 const productService = require('../services/productService');
@@ -35,6 +36,24 @@ const orderService = require('../services/orderService');
 const customerService = require('../services/customerService');
 const conversationService = require('../services/conversationService');
 const paymentService = require('../services/paymentService');
+
+/**
+ * A picture that lives in the repo, not a link to it.
+ *
+ * These three used to paste a raw.githubusercontent.com URL into the message.
+ * A customer who asks for the QR wants the QR: a github.com link in a WhatsApp
+ * chat looks like a scam, most phones will not preview it, and nobody scans a
+ * URL. The file is sitting in assets/, so send the file.
+ *
+ * The URL survives as the fallback only - if the media send fails, a link the
+ * customer can open beats silence.
+ */
+const ASSETS = {
+  spiderman_qr: 'spiderman_qr.jpg',
+  spiderman_size_chart: 'spiderman_size_chart.jpg',
+};
+
+const assetPath = (key) => nodePath.join(config.ROOT, 'assets', ASSETS[key]);
 
 const money = (n) => `${config.CURRENCY}${Math.round(Number(n) || 0)}`;
 
@@ -764,24 +783,76 @@ Interested ho toh abhi booking karwa deta hoon.`;
     },
 
     async send_spiderman_scanner() {
-      const msg = 'Great! Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️\n\nPayment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg\n\nAbhi payment karke screenshot bhejo. Main check karke aapki booking confirm karta hoon.';
-      
-      await bot.sendMessage(phone, msg);
-      return { ok: true, reason: 'Spider-Man scanner link sent to customer successfully. Do NOT send any other text or questions.' };
+      const intro =
+        'Great! Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. ' +
+        'Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️';
+
+      await bot.sendMessage(phone, intro);
+
+      const sent = await bot.sendImage(phone, assetPath('spiderman_qr'), '').catch((err) => {
+        logger.warn('agent.spiderman_qr_failed', { phone, error: err.message });
+        return false;
+      });
+
+      /** The link is the fallback, never the default. */
+      if (!sent) {
+        await bot.sendMessage(phone, 'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg');
+      }
+
+      await bot.sendMessage(
+        phone,
+        'Abhi payment karke screenshot bhejo. Main check karke aapki booking confirm karta hoon.'
+      );
+
+      return {
+        ok: true,
+        sent: sent ? 'image' : 'link',
+        reason:
+          'Spider-Man payment scanner already sent to the customer. Do NOT send any other text, link or questions.',
+      };
     },
 
     async send_bag_scanner() {
-      const msg = 'Yahan par pay karke screenshot bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.\n\nPayment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg';
-      
-      await bot.sendMessage(phone, msg);
-      return { ok: true, reason: 'Bag scanner link sent to customer successfully. Do NOT send any other text or questions.' };
+      await bot.sendMessage(
+        phone,
+        'Yahan par pay karke screenshot bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. ' +
+          'Baaki hamare owner aakar aapse baat kar lenge.'
+      );
+
+      const sent = await bot.sendImage(phone, assetPath('spiderman_qr'), '').catch((err) => {
+        logger.warn('agent.bag_qr_failed', { phone, error: err.message });
+        return false;
+      });
+
+      if (!sent) {
+        await bot.sendMessage(phone, 'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg');
+      }
+
+      return {
+        ok: true,
+        sent: sent ? 'image' : 'link',
+        reason:
+          'Bag payment scanner already sent to the customer. Do NOT send any other text, link or questions.',
+      };
     },
 
     async send_spiderman_size_chart() {
-      const msg = 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg';
-      
-      await bot.sendMessage(phone, msg);
-      return { ok: true, reason: 'Spider-Man size chart link sent to customer successfully.' };
+      const sent = await bot
+        .sendImage(phone, assetPath('spiderman_size_chart'), 'Spider-Man T-Shirt Size Chart 🕷️')
+        .catch((err) => {
+          logger.warn('agent.spiderman_size_chart_failed', { phone, error: err.message });
+          return false;
+        });
+
+      if (!sent) {
+        await bot.sendMessage(phone, 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg');
+      }
+
+      return {
+        ok: true,
+        sent: sent ? 'image' : 'link',
+        reason: 'Spider-Man size chart already sent to the customer. Do NOT send any other text or link.',
+      };
     },
 
     async handoff_to_human({ reason }) {
