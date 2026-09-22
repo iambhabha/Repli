@@ -342,7 +342,7 @@ const DEFINITIONS = [
     function: {
       name: 'send_spiderman_scanner',
       description:
-        'CRITICAL: Call this IMMEDIATELY when the customer confirms the size they want to book for the Spider-Man T-shirt, OR when they explicitly ask for a payment scanner/QR. Do NOT generate your own text asking for payment; this tool will send the complete payment instructions automatically.',
+        'CRITICAL: Call this IMMEDIATELY when the customer confirms the size they want to book for the Spider-Man T-shirt, OR when they explicitly ask for a payment scanner/QR. EVEN IF you have already called this tool in a previous turn, you MUST CALL IT AGAIN if the customer asks for the QR/scanner again. Do NOT generate your own text; this tool will send the instructions automatically.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -351,7 +351,7 @@ const DEFINITIONS = [
     function: {
       name: 'send_bag_scanner',
       description:
-        'CRITICAL: Call this IMMEDIATELY when the customer says they want to book a bag (like Elite Bag) OR when they explicitly ask for a payment scanner for bags. Do NOT generate your own text asking for payment or confirming which bag; this tool will send the payment scanner and ask them for the screenshot of the bag they want.',
+        'CRITICAL: Call this IMMEDIATELY when the customer says they want to book a bag (like Elite Bag) OR when they explicitly ask for a payment scanner for bags. EVEN IF you have already called this tool in a previous turn, you MUST CALL IT AGAIN if the customer asks for the QR/scanner again. Do NOT generate your own text.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
