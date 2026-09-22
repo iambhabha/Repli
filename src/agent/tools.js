@@ -330,6 +330,15 @@ const DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'send_bag_scanner',
+      description:
+        'CRITICAL: Call this IMMEDIATELY when the customer says they want to book a bag (like Elite Bag) OR when they explicitly ask for a payment scanner for bags. Do NOT generate your own text asking for payment or confirming which bag; this tool will send the payment scanner and ask them for the screenshot of the bag they want.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'send_spiderman_size_chart',
       description:
         'Send the specific size chart image for the Spider-Man T-shirt. Call this when the customer asks about the size chart or measurements for the Spider-Man T-shirt.',
@@ -759,6 +768,13 @@ Interested ho toh abhi booking karwa deta hoon.`;
       
       await bot.sendMessage(phone, msg);
       return { ok: true, reason: 'Spider-Man scanner link sent to customer successfully. Do NOT send any other text or questions.' };
+    },
+
+    async send_bag_scanner() {
+      const msg = 'Yahan par pay karke screenshot bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.\n\nPayment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg';
+      
+      await bot.sendMessage(phone, msg);
+      return { ok: true, reason: 'Bag scanner link sent to customer successfully. Do NOT send any other text or questions.' };
     },
 
     async send_spiderman_size_chart() {
