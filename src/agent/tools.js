@@ -812,21 +812,13 @@ Interested ho toh abhi booking karwa deta hoon.`;
     },
 
     async send_spiderman_size_chart() {
-      const sent = await bot
-        .sendImage(phone, assetPath('spiderman_size_chart'), 'Spider-Man T-Shirt Size Chart 🕷️')
-        .catch((err) => {
-          logger.warn('agent.spiderman_size_chart_failed', { phone, error: err.message });
-          return false;
-        });
-
-      if (!sent) {
-        await bot.sendMessage(phone, 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg');
-      }
+      const msg = 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg';
+      
+      await bot.sendMessage(phone, msg);
 
       return {
         ok: true,
-        sent: sent ? 'image' : 'link',
-        reason: 'Spider-Man size chart already sent to the customer. Do NOT send any other text or link.',
+        reason: 'Success. YOU MUST STOP NOW. DO NOT GENERATE ANY OTHER TEXT. End your turn.',
       };
     },
 
