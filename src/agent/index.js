@@ -209,6 +209,11 @@ async function handleMessage(bot, msg) {
     return null;
   });
 
+  if (reply === '[SILENT]') {
+    consecutiveFailures.delete(phone);
+    return 'agent_silent';
+  }
+
   if (!reply) {
     /**
      * No answer, so no guess - but not a life sentence either.

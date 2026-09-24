@@ -710,13 +710,35 @@ module.exports = function wwebjsDriver() {
       console.error(`\n❌ Login failed: ${message}\n   Delete .wa-session/ and try again.\n`);
     });
 
-    client.on('ready', () => {
+    client.on('ready', async () => {
       connected = true;
       const host = client.info?.wid?.user || 'unknown';
       const self = client.info?.wid?._serialized;
       if (self) chatIds.set(config.normalisePhone(host), self);
       logger.info('whatsapp.ready', { phone: host });
       console.log(`\n✅ Repli connected as ${host}\n`);
+      
+      try {
+        const chats = await client.getChats();
+        let missedCount = 0;
+        for (const chat of chats) {
+          // If the last message in the chat is from the customer (not us), and it was in the last 14 hours
+          if (chat.lastMessage && !chat.lastMessage.fromMe) {
+             const ts = chat.lastMessage.timestamp * 1000;
+             if (Date.now() - ts < 14 * 60 * 60 * 1000) {
+                missedCount++;
+                try {
+                  await handler(await normalise(chat.lastMessage));
+                } catch (e) {
+                  logger.error('whatsapp.on_message_failed', { error: e.message });
+                }
+             }
+          }
+        }
+        logger.info('whatsapp.processed_missed', { count: missedCount });
+      } catch (err) {
+        logger.error('whatsapp.fetch_unread_failed', { error: err.message });
+      }
     });
 
     client.on('disconnected', (reason) => {

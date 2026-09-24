@@ -24,6 +24,7 @@ const adminService = require('../services/adminService');
  * can never interleave and corrupt their state. Different customers still
  * run concurrently, so the WhatsApp listener is never blocked.
  */
+const debounceTimers = new Map();
 const queues = new Map();
 
 function enqueue(phone, task) {
@@ -185,8 +186,16 @@ function createRouter(bot) {
 
     await bot.markAsRead(msg.id, phone);
 
-    return enqueue(phone, async () => {
-      const started = Date.now();
+    if (debounceTimers.has(phone)) {
+      clearTimeout(debounceTimers.get(phone));
+    }
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        debounceTimers.delete(phone);
+        resolve(
+          enqueue(phone, async () => {
+            const started = Date.now();
       let before = { state: 'START', mode: 'BOT' };
 
       /**
@@ -249,6 +258,10 @@ function createRouter(bot) {
         // watching a shop that is typing and never speaks.
         await typingOff(bot, phone);
       }
+    })
+        );
+      }, 3000); // 3-second debounce
+      debounceTimers.set(phone, timer);
     });
   };
 }

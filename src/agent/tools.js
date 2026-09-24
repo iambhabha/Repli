@@ -427,9 +427,16 @@ function handlers(bot, phone) {
 
       // BAG OVERRIDE: Send the Instagram video link instead of photos
       if (found.product.name.toLowerCase().includes('bag') || found.product.name.toLowerCase().includes('backpack')) {
-        const msg = "Bhai, bag ka complete video is Instagram link pe hai: https://www.instagram.com/reel/DcY0wtnt4RL/?stkn=YTBod29rcGpoemZv . Aap wahi video dekh lo, aur fir ₹200 advance (COD ke liye) ya full payment karke screenshot nikal kar bhej do. Payment aane ke baad hum bag dispatch kar denge.";
+        const msg = "Bhai, bag ka complete video is Instagram link pe hai: https://www.instagram.com/reel/DcY0wtnt4RL/?stkn=YTBod29rcGpoemZv . iss mein sab bags ke patterns aapko dikh gayege aapko jo bhi bag chaye aap iss mein se dekh kr scanner pr payment kr do hum dispatch kr dege.";
         await bot.sendMessage(phone, msg);
-        return { ok: true, reason: 'Instagram video link sent. Do NOT send any other text, photos, or questions.' };
+        return { ok: true, reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE.' };
+      }
+
+      // T-SHIRT OVERRIDE: Send a message + link instead of photos
+      if (found.product.name.toLowerCase().includes('shirt') || found.product.name.toLowerCase().includes('hoodie')) {
+        const msg = "Bhai, T-Shirt ka design aur photos is link pe hai: [TSHIRT_LINK_HERE] . Aap yahan se design dekh lo, aur fir mujhe size bata do confirm karne ke liye!";
+        await bot.sendMessage(phone, msg);
+        return { ok: true, reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE.' };
       }
 
       let variant = null;
@@ -760,9 +767,17 @@ Agar last time booking miss ho gayi thi, *ye chance miss mat karna.* 🔥
 *Apna size book karne ke liye abhi DM karo 📩🕷️*
 
 *DM @9321684451* ✅`;
+
+      const msg2 = `Yaha par payment kar do warna bro jaldi se book kar lo, booking slots full ho jayenge warna fir se wait karna padega 1-2 months! 🕷️
+
+Payment Scanner:
+https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg
+
+Abhi payment karke screenshot bhejo. Main check karke aapki booking confirm karta hoon.`;
       
       await bot.sendMessage(phone, msg);
-      return { ok: true, reason: 'Master message sent to customer successfully. Do not send any additional text.' };
+      await bot.sendMessage(phone, msg2);
+      return { ok: true, reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE. Do not generate any other text.' };
     },
 
     async send_elite_bag_master_message() {
@@ -774,12 +789,16 @@ Agar last time booking miss ho gayi thi, *ye chance miss mat karna.* 🔥
 🧦 Free Socks
 💵 COD Available — *₹200 extra* for COD
 
-⚠️ *Limited pieces left!* Agar book karna hai toh jaldi kar do, kyunki ye *₹2,599 ka price kahin nahi milega — guaranteed.* 🔥
+⚠️ *Limited pieces left!* Agar book karna hai toh jaldi kar do, kyunki ye *₹2,599 ka price kahin nahi milega — guaranteed.* 🔥`;
 
-Interested ho toh abhi booking karwa deta hoon.`;
+      const msg2 = `Yahan par pay karke screenshot bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.
+
+Payment Scanner:
+https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
 
       await bot.sendMessage(phone, msg);
-      return { ok: true, reason: 'Elite Bag master message sent to customer successfully. Do not send any additional text.' };
+      await bot.sendMessage(phone, msg2);
+      return { ok: true, reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE. Do not generate any other text.' };
     },
 
     async send_spiderman_scanner() {
@@ -793,7 +812,7 @@ Interested ho toh abhi booking karwa deta hoon.`;
 
       return {
         ok: true,
-        reason: 'Success. YOU MUST STOP NOW. DO NOT GENERATE ANY OTHER TEXT. End your turn.',
+        reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE. Do not generate any other text.',
       };
     },
 
@@ -807,7 +826,7 @@ Interested ho toh abhi booking karwa deta hoon.`;
 
       return {
         ok: true,
-        reason: 'Success. YOU MUST STOP NOW. DO NOT GENERATE ANY OTHER TEXT. End your turn.',
+        reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE. Do not generate any other text.',
       };
     },
 
@@ -818,7 +837,7 @@ Interested ho toh abhi booking karwa deta hoon.`;
 
       return {
         ok: true,
-        reason: 'Success. YOU MUST STOP NOW. DO NOT GENERATE ANY OTHER TEXT. End your turn.',
+        reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE. Do not generate any other text.',
       };
     },
 
