@@ -331,9 +331,9 @@ const DEFINITIONS = [
   {
     type: 'function',
     function: {
-      name: 'send_elite_bag_master_message',
+      name: 'send_bag_master_message',
       description:
-        'Send the exact approved ELITE BAG customer message. Call this when the customer asks about the Elite Bag / Elite Backpack and the full offer (price, freebies, COD) needs to be explained. Do NOT summarize or explain it yourself; just call this tool.',
+        'Send the exact approved BAG promotional message. Call this when the customer asks about ANY Bag (Elite Bag, Nike Bag, Utility, etc). Do NOT summarize or explain it yourself; just call this tool.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -780,16 +780,19 @@ Abhi payment karke screenshot bhejo. Main check karke aapki booking confirm kart
       return { ok: true, reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE. Do not generate any other text.' };
     },
 
-    async send_elite_bag_master_message() {
-      const msg = `Yes bro! 🔥 Elite Bag ka price pehle *₹3,099* tha, but abhi special offer chal raha hai — *sirf ₹2,599* mein mil raha hai! 🏀
+    async send_bag_master_message() {
+      const msg = `(🔥 **SPECIAL OFFER — LIMITED TIME ONLY** 🔥
 
-🎒 *Elite Bag — ₹2,599*
-🚚 Free All-India Shipping
-🔑 Free Premium Keychain
-🧦 Free Socks
-💵 COD Available — *₹200 extra* for COD
+🎒 **Elite Bag — ~~₹3,499~~ ₹2,599**
 
-⚠️ *Limited pieces left!* Agar book karna hai toh jaldi kar do, kyunki ye *₹2,599 ka price kahin nahi milega — guaranteed.* 🔥`;
+🎧 **Apple Earphones — ₹1,999 → ₹0 FREE GIFT 🎁**
+
+🚚 **FREE All-India Shipping **→ ₹0
+
+💰 **TOTAL YOU SAVE: ₹2,899 DISCOUNT 🔥**
+₹900 Bag Discount + ₹1,999 Earphones FREE
+
+⚠️ Limited pieces only — offer stock khatam hone se pehle book kar lo! 👊)`;
 
       const msg2 = `Yahan par pay karke screenshot bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.
 

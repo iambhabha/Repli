@@ -710,35 +710,70 @@ module.exports = function wwebjsDriver() {
       console.error(`\n❌ Login failed: ${message}\n   Delete .wa-session/ and try again.\n`);
     });
 
-    client.on('ready', async () => {
+    client.on('ready', () => {
       connected = true;
       const host = client.info?.wid?.user || 'unknown';
       const self = client.info?.wid?._serialized;
       if (self) chatIds.set(config.normalisePhone(host), self);
       logger.info('whatsapp.ready', { phone: host });
       console.log(`\n✅ Repli connected as ${host}\n`);
-      
-      try {
-        const chats = await client.getChats();
-        let missedCount = 0;
-        for (const chat of chats) {
-          // If the last message in the chat is from the customer (not us), and it was in the last 14 hours
-          if (chat.lastMessage && !chat.lastMessage.fromMe) {
-             const ts = chat.lastMessage.timestamp * 1000;
-             if (Date.now() - ts < 14 * 60 * 60 * 1000) {
-                missedCount++;
-                try {
-                  await handler(await normalise(chat.lastMessage));
-                } catch (e) {
-                  logger.error('whatsapp.on_message_failed', { error: e.message });
-                }
-             }
+
+      // Manual scrape for missed messages, bypassing library bugs
+      setTimeout(async () => {
+          try {
+              const missedMsgs = await client.pupPage.evaluate(() => {
+                  if (!window.require) return [];
+                  const WA = window.require('WAWebCollections');
+                  if (!WA || !WA.Chat) return [];
+                  const chats = WA.Chat.getModelsArray().filter(c => c.unreadCount > 0 && !c.isGroup);
+                  const results = [];
+                  for (const c of chats) {
+                      if (c.msgs && c.msgs.models) {
+                          const msgs = c.msgs.models.slice(-c.unreadCount);
+                          for (const m of msgs) {
+                              if (m.id && !m.id.fromMe) {
+                                  results.push({
+                                      id: m.id._serialized,
+                                      phone: (m.from && m.from.user) || (c.id && c.id.user),
+                                      body: m.body || '',
+                                      type: m.type,
+                                      t: m.t
+                                  });
+                              }
+                          }
+                      }
+                  }
+                  return results;
+              });
+
+              let totalFetched = 0;
+              for (const raw of missedMsgs) {
+                  try {
+                       const synthMsg = {
+                           id: raw.id,
+                           phone: raw.phone || '',
+                           text: raw.type === 'chat' ? raw.body : `[${raw.type}]`,
+                           isMedia: raw.type !== 'chat',
+                           media: null,
+                           isGroup: false,
+                           isStatus: false,
+                           fromMe: false,
+                           type: raw.type,
+                           mimetype: null,
+                           timestamp: raw.t,
+                           pushName: ''
+                       };
+                       await handler(synthMsg);
+                       totalFetched++;
+                  } catch (e) {
+                      logger.error('whatsapp.on_message_failed', { error: e.message });
+                  }
+              }
+              console.log(`\n📬 Scraped and processed ${totalFetched} missed messages from memory.\n`);
+          } catch(err) {
+              logger.error('whatsapp.scrape_failed', { error: String(err && err.message) });
           }
-        }
-        logger.info('whatsapp.processed_missed', { count: missedCount });
-      } catch (err) {
-        logger.error('whatsapp.fetch_unread_failed', { error: err.message });
-      }
+      }, 15000);
     });
 
     client.on('disconnected', (reason) => {
