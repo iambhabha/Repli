@@ -6,40 +6,24 @@ const supabaseKey = env.find(l => l.startsWith('SUPABASE_SECRET_KEY=')).split('=
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const rawNumbers = `
-9667103596
+8451916056
+9702606776
+9029299301
+7731824069
+7065127186
+9494269357
 8698444124
-8447993216
-9118815982
-9867646598
-8108326574
-9360797875
-9538550514
-9124381666
-8779227103
-9131000507
-7050552888
-9319473756
-9356719365
-8657334390
-9438166637
-8830761732
-9312436492
-6378692666
-9140729170
-9769287725
-9875398676
-8910291812
-9528442713
-6290655878
-8886290906
-9041150943
-9095863583
+8239677197
+7208147071
++971 54 281 125
+7569837584
+7477719395
 `;
 
 const numbers = rawNumbers.split('\n').map(n => n.trim().replace(/[^0-9]/g, '')).filter(n => n.length > 0);
 
 async function main() {
-  const message = "Hii! Welcome to 3pointer.club 🔥 Sorry for the late reply. Aapko konsa T-shirt ya bag chahiye? Main aapki abhi help kar dunga!";
+  const message = "Hey bro 👋 Welcome to 3POINTER.CLUB & AESTHURA!\n\nT-shirts, bags & hoodies available hain. Batao kya dekhna hai? 👊\n\nYe hamara group link hai join kar lo for further updates: https://chat.whatsapp.com/Hx7Xc4ny3PuLkXqWj34UpA";
   for (let num of numbers) {
     if (num.length === 10) num = '91' + num;
     const { error } = await supabase.from('outbound_messages').insert({

@@ -770,13 +770,21 @@ Agar last time booking miss ho gayi thi, *ye chance miss mat karna.* 🔥
 
       const msg2 = `Yaha par payment kar do warna bro jaldi se book kar lo, booking slots full ho jayenge warna fir se wait karna padega 1-2 months! 🕷️
 
+Abhi payment karke screenshot 8828128178 iss number pe bhej dena. Main check karke aapki booking confirm karta hoon.`;
+
+      const msg2Fallback = `Yaha par payment kar do warna bro jaldi se book kar lo, booking slots full ho jayenge warna fir se wait karna padega 1-2 months! 🕷️
+
 Payment Scanner:
 https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg
 
 Abhi payment karke screenshot 8828128178 iss number pe bhej dena. Main check karke aapki booking confirm karta hoon.`;
       
       await bot.sendMessage(phone, msg);
-      await bot.sendMessage(phone, msg2);
+      try {
+        await bot.sendImage(phone, assetPath('spiderman_qr'), msg2);
+      } catch (err) {
+        await bot.sendMessage(phone, msg2Fallback);
+      }
       return { ok: true, reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE. Do not generate any other text.' };
     },
 
@@ -794,13 +802,19 @@ Abhi payment karke screenshot 8828128178 iss number pe bhej dena. Main check kar
 
 ⚠️ Limited pieces only — offer stock khatam hone se pehle book kar lo! 👊)`;
 
-      const msg2 = `Yahan par pay karke screenshot 8828128178 iss number pe bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.
+      const msg2 = `Yahan par pay karke screenshot 8828128178 iss number pe bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.`;
+
+      const msg2Fallback = `Yahan par pay karke screenshot 8828128178 iss number pe bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.
 
 Payment Scanner:
 https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
 
       await bot.sendMessage(phone, msg);
-      await bot.sendMessage(phone, msg2);
+      try {
+        await bot.sendImage(phone, assetPath('spiderman_qr'), msg2);
+      } catch (err) {
+        await bot.sendMessage(phone, msg2Fallback);
+      }
       return { ok: true, reason: 'Success. YOU MUST REPLY EXACTLY WITH "[SILENT]" AND NOTHING ELSE. Do not generate any other text.' };
     },
 
@@ -808,10 +822,19 @@ https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
       const msg =
         'Great! Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. ' +
         'Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️\n\n' +
+        'Abhi payment karke screenshot 8828128178 iss number pe bhej dena. Main check karke aapki booking confirm karta hoon.';
+
+      const fallbackMsg =
+        'Great! Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. ' +
+        'Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️\n\n' +
         'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg\n\n' +
         'Abhi payment karke screenshot 8828128178 iss number pe bhej dena. Main check karke aapki booking confirm karta hoon.';
 
-      await bot.sendMessage(phone, msg);
+      try {
+        await bot.sendImage(phone, assetPath('spiderman_qr'), msg);
+      } catch (err) {
+        await bot.sendMessage(phone, fallbackMsg);
+      }
 
       return {
         ok: true,
@@ -822,10 +845,18 @@ https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
     async send_bag_scanner() {
       const msg =
         'Yahan par pay karke screenshot 8828128178 iss number pe bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. ' +
+        'Baaki hamare owner aakar aapse baat kar lenge.';
+
+      const fallbackMsg =
+        'Yahan par pay karke screenshot 8828128178 iss number pe bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. ' +
         'Baaki hamare owner aakar aapse baat kar lenge.\n\n' +
         'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg';
 
-      await bot.sendMessage(phone, msg);
+      try {
+        await bot.sendImage(phone, assetPath('spiderman_qr'), msg);
+      } catch (err) {
+        await bot.sendMessage(phone, fallbackMsg);
+      }
 
       return {
         ok: true,
@@ -834,9 +865,14 @@ https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
     },
 
     async send_spiderman_size_chart() {
-      const msg = 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg';
+      const msg = 'Spider-Man T-Shirt Size Chart 🕷️';
+      const fallbackMsg = 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg';
       
-      await bot.sendMessage(phone, msg);
+      try {
+        await bot.sendImage(phone, assetPath('spiderman_size_chart'), msg);
+      } catch (err) {
+        await bot.sendMessage(phone, fallbackMsg);
+      }
 
       return {
         ok: true,
