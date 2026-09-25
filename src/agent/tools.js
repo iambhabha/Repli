@@ -773,7 +773,7 @@ Agar last time booking miss ho gayi thi, *ye chance miss mat karna.* 🔥
 Payment Scanner:
 https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg
 
-Abhi payment karke screenshot bhejo. Main check karke aapki booking confirm karta hoon.`;
+Abhi payment karke screenshot 8828128178 iss number pe bhej dena. Main check karke aapki booking confirm karta hoon.`;
       
       await bot.sendMessage(phone, msg);
       await bot.sendMessage(phone, msg2);
@@ -794,7 +794,7 @@ Abhi payment karke screenshot bhejo. Main check karke aapki booking confirm kart
 
 ⚠️ Limited pieces only — offer stock khatam hone se pehle book kar lo! 👊)`;
 
-      const msg2 = `Yahan par pay karke screenshot bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.
+      const msg2 = `Yahan par pay karke screenshot 8828128178 iss number pe bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. Baaki hamare owner aakar aapse baat kar lenge.
 
 Payment Scanner:
 https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
@@ -809,7 +809,7 @@ https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
         'Great! Book fast, warna booking slots full ho jayenge aur phir next booking cycle ka wait karna padega. ' +
         'Jaldi book kar do, warna 1–2 months ka wait ho sakta hai. 🕷️\n\n' +
         'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg\n\n' +
-        'Abhi payment karke screenshot bhejo. Main check karke aapki booking confirm karta hoon.';
+        'Abhi payment karke screenshot 8828128178 iss number pe bhej dena. Main check karke aapki booking confirm karta hoon.';
 
       await bot.sendMessage(phone, msg);
 
@@ -821,7 +821,7 @@ https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
 
     async send_bag_scanner() {
       const msg =
-        'Yahan par pay karke screenshot bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. ' +
+        'Yahan par pay karke screenshot 8828128178 iss number pe bhej do, aur jo bhi bag chahiye uska bhi screenshot bhej do. ' +
         'Baaki hamare owner aakar aapse baat kar lenge.\n\n' +
         'Payment Scanner:\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg';
 
