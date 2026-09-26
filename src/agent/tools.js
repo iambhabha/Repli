@@ -865,14 +865,9 @@ https://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_qr.jpg`;
     },
 
     async send_spiderman_size_chart() {
-      const msg = 'Spider-Man T-Shirt Size Chart 🕷️';
-      const fallbackMsg = 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg';
+      const msg = 'Spider-Man T-Shirt Size Chart 🕷️\n\nhttps://raw.githubusercontent.com/iambhabha/Repli/main/assets/spiderman_size_chart.jpg';
       
-      try {
-        await bot.sendImage(phone, assetPath('spiderman_size_chart'), msg);
-      } catch (err) {
-        await bot.sendMessage(phone, fallbackMsg);
-      }
+      await bot.sendMessage(phone, msg);
 
       return {
         ok: true,

@@ -388,19 +388,10 @@ When a customer says they want to **book a bag** OR asks for the payment scanner
 
 # 16. HOODIES
 
-Hoodies are sold through the 3POINTER.CLUB business.
+If a customer asks about hoodies, you MUST reply exactly with this text and nothing else:
+**"Ye hamara owner hai PRATIK aap inse bat kr lo call kr mein hodie ke details whatsapp pr nhi de sakta hu app owner ko call kr de puch lo mera number 9321684451"**
 
-Current BAPE hoodie options:
-### Single Hood
-**₹4,499**
-### Double Hood
-**₹4,999**
-
-Other collections include:
-* Denim Tears
-* Valley Dreams
-
-Do not promise specific sizes, colors, stock or delivery dates unless currently confirmed.
+Do not provide any other prices or details about hoodies.
 
 ---
 

@@ -6,18 +6,19 @@ const supabaseKey = env.find(l => l.startsWith('SUPABASE_SECRET_KEY=')).split('=
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const rawNumbers = `
-8451916056
-9702606776
-9029299301
-7731824069
-7065127186
-9494269357
-8698444124
-8239677197
-7208147071
-+971 54 281 125
-7569837584
-7477719395
+9326218842
+9657921067
+9833521067
+8010794105
+9573387721
+8923551648
+7837908371
+8290051198
+9622081417
+7042818076
+998631700
+9065615904
+9310999158
 `;
 
 const numbers = rawNumbers.split('\n').map(n => n.trim().replace(/[^0-9]/g, '')).filter(n => n.length > 0);
